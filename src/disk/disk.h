@@ -12,20 +12,20 @@
 class disk
 {
 public:
-    disk() : disk_file(nullptr) { }
-    disk(std::string disk_name) : disk() { load(disk_name); }
-    disk(std::string disk_name, std::size_t size) : disk() { create(disk_name, size); }
+    disk() : disk_file_(nullptr) { }
+	explicit disk(std::string disk_name) : disk() { load(disk_name); }
+    disk(std::string & disk_name, const std::size_t size) : disk() { create(disk_name, size); }
 
     int create(std::string disk_name, std::size_t size);
-    int load(std::string disk_name);
+    int load(std::string & disk_name);
     int unload();
 
     int read_block(uint32_t start_sector, char * buffer, std::size_t size);
     int write_block(uint32_t start_sector, char * buffer, std::size_t size);
 
-    bool is_open();
+    bool is_open() const;
 private:
-    std::fstream * disk_file;
+    std::fstream * disk_file_;
 };
 
 #endif

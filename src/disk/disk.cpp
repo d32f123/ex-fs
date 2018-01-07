@@ -2,7 +2,7 @@
 
 int disk::create(std::string disk_name, std::size_t size)
 {
-    std::fstream * disk = new std::fstream;
+	auto disk = new std::fstream;
 
     this->unload();
 
@@ -21,15 +21,15 @@ int disk::create(std::string disk_name, std::size_t size)
             return EP_WRFIL;
     }
 
-    this->disk_file = disk;
+    this->disk_file_ = disk;
 
     disk->flush();
     return 0;
 }
 
-int disk::load(std::string disk_name)
+int disk::load(std::string & disk_name)
 {
-    std::fstream * disk = new std::fstream;
+	auto disk = new std::fstream;
 
     this->unload();
 
@@ -41,45 +41,47 @@ int disk::load(std::string disk_name)
     if (!(*disk))
         return EP_OPFIL;
 
-    this->disk_file = disk;
+    this->disk_file_ = disk;
     return 0;
 }
 
 int disk::unload()
 {
-    if (this->disk_file && this->disk_file->is_open())
+    if (this->disk_file_ && this->disk_file_->is_open())
     {
-        this->disk_file->flush();
-        this->disk_file->close();
-        this->disk_file = nullptr;
+        this->disk_file_->flush();
+        this->disk_file_->close();
+        this->disk_file_ = nullptr;
+        return 0;
     }
+    return ED_NODISK;
 }
 
-int disk::read_block(uint32_t start_sector, char * buffer, std::size_t size)
+int disk::read_block(const uint32_t start_sector, char * buffer, const std::size_t size)
 {
-    if (!(this->disk_file) || !(this->disk_file->is_open()))
+    if (!(this->disk_file_) || !(this->disk_file_->is_open()))
         return ED_NODISK;
-    this->disk_file->seekg(start_sector * SECTOR_SIZE, this->disk_file->beg);
-    this->disk_file->read(buffer, size * SECTOR_SIZE);
+    this->disk_file_->seekg(start_sector * SECTOR_SIZE, std::fstream::beg);
+    this->disk_file_->read(buffer, size * SECTOR_SIZE);
 
-    if (this->disk_file)
+    if (this->disk_file_)
         return 0;
     return EP_RDFIL;
 }
 
-int disk::write_block(uint32_t start_sector, char * buffer, std::size_t size)
+int disk::write_block(const uint32_t start_sector, char * buffer, const std::size_t size)
 {
-    if (!(this->disk_file) || !(this->disk_file->is_open()))
+    if (!(this->disk_file_) || !(this->disk_file_->is_open()))
         return ED_NODISK;
-    this->disk_file->seekp(start_sector * SECTOR_SIZE, this->disk_file->end);
-    this->disk_file->write(buffer, size * SECTOR_SIZE);
+    this->disk_file_->seekp(start_sector * SECTOR_SIZE, std::fstream::end);
+    this->disk_file_->write(buffer, size * SECTOR_SIZE);
 
-    if (this->disk_file)
+    if (this->disk_file_)
         return 0;
     return EP_WRFIL;
 }
 
-bool disk::is_open()
+bool disk::is_open() const
 {
-    return this->disk_file && this->disk_file->is_open();
+    return this->disk_file_ && this->disk_file_->is_open();
 }

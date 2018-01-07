@@ -7,7 +7,9 @@
 
 #include "../disk/disk.h"
 #include "../superblock/superblock.h"
+#include "../inode/inode.h"
 #include "../errors.h"
+#include "../spacemap/spacemap.h"
 
 typedef unsigned int fid_t;
 
@@ -18,14 +20,14 @@ public:
     file_system() 
         : file_system(16) {}
     /* TODO: CACHE */
-    file_system(std::size_t)
-        : disk {nullptr}, data_buffer {new char[SECTOR_SIZE]} {}
+	explicit file_system(std::size_t)
+		: disk_{ nullptr }, data_buffer_{ nullptr }, super_block_{} {}
 
     // Create a new disk image
-    int init(std::string disk_file, uint32_t inodes_count, 
+    int init(std::string & disk_file, uint32_t inodes_count, 
         std::size_t disk_size, uint32_t block_size);
     // Load a disk image from a file
-    int load(std::string disk_file);
+    int load(std::string & disk_file);
     // Unload current disk image
     void unload();
     // Sync changes to disk image file
@@ -41,9 +43,10 @@ public:
 
     int seek(fid_t fid, std::size_t pos);
 private:
-    disk disk;
-    char * data_buffer;
-    super_block_t super_block;
+    disk disk_;
+    char * data_buffer_;
+    super_block_t super_block_;
+	space_map * space_map_;
 };
 
 #endif
