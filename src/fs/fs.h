@@ -5,10 +5,9 @@
 #include <string>
 #include <fstream>
 
-#include "disk.h"
+#include "../disk/disk.h"
 #include "../superblock/superblock.h"
-
-#define E_OPEN_FILE     -1
+#include "../errors.h"
 
 typedef unsigned int fid_t;
 
@@ -18,9 +17,13 @@ public:
     // Default constructor
     file_system() 
         : file_system(16) {}
+    /* TODO: CACHE */
     file_system(std::size_t)
-        : disk {nullptr}, data_buffer {new char[SECTOR_SIZE]} {};
+        : disk {nullptr}, data_buffer {new char[SECTOR_SIZE]} {}
 
+    // Create a new disk image
+    int init(std::string disk_file, uint32_t inodes_count, 
+        std::size_t disk_size, uint32_t block_size);
     // Load a disk image from a file
     int load(std::string disk_file);
     // Unload current disk image
@@ -38,11 +41,9 @@ public:
 
     int seek(fid_t fid, std::size_t pos);
 private:
-    std::fstream * disk;
+    disk disk;
     char * data_buffer;
     super_block_t super_block;
-
-
 };
 
 #endif
