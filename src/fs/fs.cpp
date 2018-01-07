@@ -91,7 +91,7 @@ int file_system::init(std::string & disk_file, const uint32_t inodes_count,
 	for (uint32_t i = 0; i < spacemap_size; ++i)
 		this->space_map_->set(true, i);
 
-	this->disk_.write_block(sb.spacemap_first_sector, this->space_map_->bits_arr, spacemap_size * block_size);
+	this->disk_.write_block(sb.spacemap_first_sector, reinterpret_cast<char *>(this->space_map_->bits_arr), spacemap_size * block_size);
 
 	// init data buffer
 	this->data_buffer_ = new char[super_block_.block_size * SECTOR_SIZE];

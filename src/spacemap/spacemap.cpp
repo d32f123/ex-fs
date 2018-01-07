@@ -16,21 +16,21 @@ space_map::space_map(uint8_t * const bits_arr, const uint32_t bits_n)
 	memcpy(this->bits_arr, bits_arr, bytes_count_);
 }
 
-bool space_map::get(int index) const
+bool space_map::get(uint32_t index) const
 {
 	return this->operator[](index);
 }
 
-bool space_map::operator[](int index) const
+bool space_map::operator[](uint32_t index) const
 {
-	if (index < 0 || index >= bits_count_)
+	if (index >= bits_count_)
 		return false;
 	return bits_arr[index / 8] & (1 << (index % 8));
 }
 
-void space_map::set(bool value, int index)
+void space_map::set(bool value, uint32_t index)
 {
-	if (index < 0 || index >= bits_count_)
+	if (index >= bits_count_)
 		return;
 	if (value)
 		bits_arr[index / 8] |= (1 << (index % 8));

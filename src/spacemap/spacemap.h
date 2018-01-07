@@ -11,10 +11,10 @@ public:
 
 	~space_map() { delete[] bits_arr; }
 
-	bool operator[](int index) const;
+	bool operator[](uint32_t index) const;
 
-	bool get(int index) const;
-	void set(bool value, int index);
+	bool get(uint32_t index) const;
+	void set(bool value, uint32_t index);
 
 	uint8_t * bits_arr;
 private:
