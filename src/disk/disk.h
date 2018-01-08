@@ -12,7 +12,7 @@
 class disk
 {
 public:
-    disk() : disk_file_(nullptr) { }
+    disk() : disk_file_ {nullptr} { }
 	explicit disk(std::string disk_name) : disk() { load(disk_name); }
     disk(std::string & disk_name, const std::size_t size) : disk() { create(disk_name, size); }
 

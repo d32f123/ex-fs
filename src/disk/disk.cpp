@@ -51,6 +51,7 @@ int disk::unload()
     {
         this->disk_file_->flush();
         this->disk_file_->close();
+        delete this->disk_file_;
         this->disk_file_ = nullptr;
         return 0;
     }
@@ -73,7 +74,7 @@ int disk::write_block(const uint32_t start_sector, char * buffer, const std::siz
 {
     if (!(this->disk_file_) || !(this->disk_file_->is_open()))
         return ED_NODISK;
-    this->disk_file_->seekp(start_sector * SECTOR_SIZE, std::fstream::end);
+    this->disk_file_->seekp(start_sector * SECTOR_SIZE, std::fstream::beg);
     this->disk_file_->write(buffer, size * SECTOR_SIZE);
 
     if (this->disk_file_)

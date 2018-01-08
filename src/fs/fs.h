@@ -21,7 +21,7 @@ public:
         : file_system(16) {}
     /* TODO: CACHE */
 	explicit file_system(std::size_t)
-		: disk_{ nullptr }, data_buffer_{ nullptr }, super_block_{} {}
+		: disk_ {}, data_buffer_{ nullptr }, super_block_{} {}
 
     // Create a new disk image
     int init(std::string & disk_file, uint32_t inodes_count, 
@@ -42,10 +42,13 @@ public:
     int write(fid_t fid, char * buffer, std::size_t size);
 
     int seek(fid_t fid, std::size_t pos);
+
+    super_block_t get_super_block() { return super_block_; }
 private:
     disk disk_;
     char * data_buffer_;
     super_block_t super_block_;
+    space_map * inode_map_;
 	space_map * space_map_;
 };
 
