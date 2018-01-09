@@ -2,8 +2,9 @@ obj
 obj/*
 .vscode
 .vscode/*
+nfso
+hey
 
-/*
 !/Makefile
 !/README.md
 !/.gitignore
