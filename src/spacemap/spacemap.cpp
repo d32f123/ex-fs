@@ -37,3 +37,14 @@ void space_map::set(bool value, uint32_t index)
 	else
 		bits_arr[index / 8] &= (~(1 << (index % 8)));
 }
+
+std::ostream & operator<<(std::ostream & os, const space_map & sm)
+{
+	os << std::hex;
+	for (uint32_t i = 0; i < sm.bytes_count_; ++i)
+	{
+		os << sm.bits_arr[i] << ((i % 8) == 0 ? "\n" : "|");
+	}
+	os << std::endl << std::dec;
+	return os;
+}

@@ -3,6 +3,11 @@ obj/*
 .vscode
 .vscode/*
 
+/*
+!/Makefile
+!/README.md
+!/.gitignore
+
 # Prerequisites
 *.d
 

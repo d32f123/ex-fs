@@ -21,7 +21,7 @@ public:
     int unload();
 
     int read_block(uint32_t start_sector, char * buffer, std::size_t size);
-    int write_block(uint32_t start_sector, char * buffer, std::size_t size);
+    int write_block(uint32_t start_sector, const char * buffer, std::size_t size);
 
     bool is_open() const;
 private:

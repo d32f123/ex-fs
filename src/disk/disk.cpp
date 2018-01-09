@@ -70,7 +70,7 @@ int disk::read_block(const uint32_t start_sector, char * buffer, const std::size
     return EP_RDFIL;
 }
 
-int disk::write_block(const uint32_t start_sector, char * buffer, const std::size_t size)
+int disk::write_block(uint32_t start_sector, const char * buffer, const std::size_t size)
 {
     if (!(this->disk_file_) || !(this->disk_file_->is_open()))
         return ED_NODISK;

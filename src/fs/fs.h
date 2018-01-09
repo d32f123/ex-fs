@@ -43,7 +43,9 @@ public:
 
     int seek(fid_t fid, std::size_t pos);
 
-    super_block_t get_super_block() { return super_block_; }
+    inline super_block_t get_super_block() { return super_block_; }
+    inline space_map * get_inode_map() { return inode_map_; }
+    inline space_map * get_space_map() { return space_map_; }
 private:
     disk disk_;
     char * data_buffer_;
