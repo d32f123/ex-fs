@@ -2,6 +2,8 @@
 
 #include <fstream>
 #include <math.h>
+#include <time.h>
+#include <string.h>
 
 static uint32_t bytes_to_blocks(uint32_t x, uint32_t bl_size)
 {
@@ -126,4 +128,130 @@ int file_system::init(std::string & disk_file, const uint32_t inodes_count,
 	this->data_buffer_ = new char[super_block_.block_size * SECTOR_SIZE];
 
 	return 0;
+}
+
+int file_system::mkdir(std::string & dir_name)
+{
+    // TODO: CHECK PATH VALIDITY
+
+    uint32_t inode_num = get_free_inode();
+    auto curr_time = time(NULL);
+
+    inode_t inode;
+    inode.permissions = 0755;
+    inode.f_type = file_type::dir;
+    inode.access_time = curr_time;
+    inode.modify_time = curr_time;
+    inode.change_time = curr_time;
+    inode.links_count = 1;
+
+    uint32_t sector = super_block_.inode_first_sector + (inode_num * sizeof(inode_t) / SECTOR_SIZE);
+    int error_code = write_object(sector, (inode_num * sizeof(inode_t)) % SECTOR_SIZE, sizeof(inode_t), &inode);
+
+    if (error_code < 0)
+        return error_code;
+    
+    // TODO: add directory entry in the created dir
+    if (dir_name == "/")
+        return 0;
+    
+    return -1;
+}
+
+int file_system::read_object(uint32_t start_sector, std::size_t offset, std::size_t obj_size, void * buffer)
+{
+    
+    uint32_t block_size_bytes = super_block_.block_size * SECTOR_SIZE;
+    if (offset + obj_size < block_size_bytes)
+    {
+        int error_code;
+        error_code = disk_.read_block(start_sector, data_buffer_, super_block_.block_size);
+        if (error_code < 0)
+            return error_code;
+        memcpy(buffer, data_buffer_ + offset, obj_size);
+        return 0;
+    }
+    // if object spans multiple blocks
+    std::size_t curr_pos;
+    std::size_t blocks_n = 1 + 
+        (obj_size - (offset - block_size_bytes)) / block_size_bytes + 
+        (((obj_size - offset) % block_size_bytes) != 0);
+
+    int error_code;
+    error_code = disk_.read_block(start_sector, data_buffer_, super_block_.block_size);
+    if (error_code < 0)
+        return error_code;
+    memcpy(buffer, data_buffer_ + offset, curr_pos = offset - block_size_bytes);
+
+    for (std::size_t i = 1; i < blocks_n - 1; ++i)
+    {
+        error_code = disk_.read_block(start_sector + i * super_block_.block_size, 
+                                        data_buffer_, super_block_.block_size);
+        if (error_code < 0)
+            return error_code;
+        memcpy(reinterpret_cast<char *>(buffer) + curr_pos, data_buffer_, block_size_bytes);
+        curr_pos += block_size_bytes;
+    }
+
+    error_code = disk_.read_block(start_sector + (blocks_n - 1) * super_block_.block_size, 
+                                    data_buffer_, super_block_.block_size);
+    if (error_code < 0)
+        return error_code;
+    memcpy(reinterpret_cast<char *>(buffer) + curr_pos, data_buffer_, obj_size - curr_pos);
+    
+    return 0;
+}
+
+int file_system::write_object(uint32_t start_sector, std::size_t offset, std::size_t obj_size, const void * buffer)
+{
+    uint32_t block_size_bytes = super_block_.block_size * SECTOR_SIZE;
+    if (offset + obj_size < block_size_bytes)
+    {
+        int error_code;
+        error_code = disk_.read_block(start_sector, data_buffer_, super_block_.block_size);
+        if (error_code < 0)
+            return error_code;
+        memcpy(data_buffer_ + offset, buffer, obj_size);
+        error_code = disk_.write_block(start_sector, data_buffer_, super_block_.block_size);
+        return error_code;
+    }
+    // if object spans multiple blocks
+    std::size_t curr_pos;
+    std::size_t blocks_n = 1 + 
+        (obj_size - (offset - block_size_bytes)) / block_size_bytes + 
+        (((obj_size - offset) % block_size_bytes) != 0);
+
+    int error_code;
+    error_code = disk_.read_block(start_sector, data_buffer_, super_block_.block_size);
+    if (error_code < 0)
+        return error_code;
+    memcpy(data_buffer_ + offset, buffer, curr_pos = offset - block_size_bytes);
+    error_code = disk_.write_block(start_sector, data_buffer_, super_block_.block_size);
+    if (error_code < 0)
+        return error_code;
+
+    for (std::size_t i = 1; i < blocks_n - 1; ++i)
+    {
+        memcpy(data_buffer_, reinterpret_cast<const char *>(buffer) + curr_pos, block_size_bytes);
+        error_code = disk_.write_block(start_sector + i * super_block_.block_size, 
+                                        data_buffer_, super_block_.block_size);
+        curr_pos += block_size_bytes;
+    }
+
+    error_code = disk_.read_block(start_sector + (blocks_n - 1) * super_block_.block_size, 
+                                    data_buffer_, super_block_.block_size);
+    if (error_code < 0)
+        return error_code;
+
+    memcpy(data_buffer_, reinterpret_cast<const char *>(buffer) + curr_pos, obj_size - curr_pos);
+
+    error_code = disk_.write_block(start_sector + (blocks_n - 1) * super_block_.block_size, 
+                                    data_buffer_, super_block_.block_size);
+    return error_code;
+}
+
+uint32_t file_system::get_free_inode()
+{
+    // TODO: IMPLEMENT
+    return -1;
 }
