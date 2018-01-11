@@ -28,6 +28,8 @@ private:
     uint32_t inode_n_;
     std::size_t curr_pos;
 
+    int get_inode(inode_t * inode_out);
+
     int get_sector(uint32_t block_index, uint32_t * sector_out, bool do_allocate = false);
     void allocate_block(uint32_t block_index);
 

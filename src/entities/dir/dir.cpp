@@ -1,6 +1,7 @@
 #include "dir.h"
 
 #include "../../errors.h"
+#include "../../fs/fs.h"
 
 #include <string.h>
 
@@ -66,7 +67,15 @@ int directory::add_entry(uint32_t inode_n, std::string & filename)
     if (dirent.inode_n != INODE_INVALID)
         return EDIR_FILE_EXISTS;
 
+    file tmp = file(inode_n, file_->fs);
+    inode_t inode;
+    auto ret = tmp.get_inode(&inode);
+
+    if (ret < 0)
+        return ret;
+
     dirent.inode_n = inode_n;
+    dirent.f_type = inode.f_type;
     strcpy(dirent.name, filename.c_str());
 
     auto prev_pos = file_->get_curr_pos();

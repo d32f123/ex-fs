@@ -37,7 +37,7 @@ inline static uint32_t bits_to_blocks(uint32_t x, uint32_t bl_size)
     return bytes_to_blocks((x >> 3) + (x % 8 != 0), bl_size);
 }
 
-int file_system::load(std::string & disk_file)
+int file_system::load(const std::string & disk_file)
 {
     if (this->disk_.is_open())
         this->unload();
@@ -87,7 +87,7 @@ void file_system::unload()
     this->disk_.unload();
 }
 
-int file_system::init(std::string & disk_file, const uint32_t inodes_count, 
+int file_system::init(const std::string & disk_file, const uint32_t inodes_count, 
     std::size_t disk_size, const uint32_t block_size)
 {
     if (this->disk_.is_open())
@@ -166,7 +166,7 @@ int file_system::init(std::string & disk_file, const uint32_t inodes_count,
 	return 0;
 }
 
-int file_system::create(std::string & file_name)
+int file_system::create(const std::string & file_name)
 {
     if (file_name.empty())
         return EDIR_INVALID_PATH;
@@ -204,7 +204,7 @@ int file_system::create(std::string & file_name)
     return 0;
 }
 
-int file_system::link(std::string & original_file, std::string & new_file)
+int file_system::link(const std::string & original_file, std::string & new_file)
 {
     if (original_file.empty() || new_file.empty())
         return EDIR_INVALID_PATH;
@@ -259,7 +259,7 @@ int file_system::link(std::string & original_file, std::string & new_file)
     return 0;
 }
 
-int file_system::unlink(std::string & file_name)
+int file_system::unlink(const std::string & file_name)
 {
     if (file_name.empty())
         return EDIR_INVALID_PATH;
@@ -319,7 +319,7 @@ int file_system::unlink(std::string & file_name)
     return 0;
 }
 
-fid_t file_system::open(std::string & disk_file)
+fid_t file_system::open(const std::string & disk_file)
 {
     uint32_t inode;
     auto ret = get_inode_by_path(disk_file, &inode);
@@ -370,7 +370,7 @@ int file_system::trunc(fid_t fid, std::size_t new_length)
     return 0;
 }
 
-int file_system::mkdir(std::string & dir_name)
+int file_system::mkdir(const std::string & dir_name)
 {
     if (dir_name.empty())
         return EDIR_INVALID_PATH;
@@ -408,7 +408,7 @@ int file_system::mkdir(std::string & dir_name)
     return 0;
 }
 
-int file_system::rmdir(std::string & dir_name)
+int file_system::rmdir(const std::string & dir_name)
 {
     if (dir_name.empty())
         return EDIR_INVALID_PATH;
@@ -431,7 +431,7 @@ int file_system::rmdir(std::string & dir_name)
     return unlink(dir_name);
 }
 
-did_t file_system::opendir(std::string & dir_name)
+did_t file_system::opendir(const std::string & dir_name)
 {
     uint32_t dir_inode;
     auto ret = get_inode_by_path(dir_name, &dir_inode);
@@ -465,7 +465,7 @@ int file_system::rewind_dir(did_t dir_id)
     return 0;
 }
 
-int file_system::get_inode_by_path(std::string & path, uint32_t * inode_out)
+int file_system::get_inode_by_path(const std::string & path, uint32_t * inode_out)
 {
     if (path.length() == 0)
     {
@@ -613,14 +613,22 @@ int file_system::write_object(uint32_t start_sector, std::size_t offset, std::si
 
 int file_system::write_inode(uint32_t inode_id, const inode_t * inode)
 {
+    if (!inode_map_->get(inode_id))
+    {
+        return EIND_INVALID_INODE;
+    }
     uint32_t sector = super_block_.inode_first_sector + (inode_id * sizeof(inode_t) / SECTOR_SIZE);
     return write_object(sector, (inode_id * sizeof(inode_t)) % SECTOR_SIZE, sizeof(inode_t), &inode);
 }
 
 int file_system::read_inode(uint32_t inode_id, inode_t * inode)
 {
+    if (!inode_map_->get(inode_id))
+    {
+        return EIND_INVALID_INODE;
+    }
     uint32_t sector = super_block_.inode_first_sector + (inode_id * sizeof(inode_t) / SECTOR_SIZE);
-    return read_object(sector, (inode_id * sizeof(inode_t)) % SECTOR_SIZE, sizeof(inode_t), &inode);
+    return read_object(sector, (inode_id * sizeof(inode_t)) % SECTOR_SIZE, sizeof(inode_t), inode);
 }
 
 inode_t file_system::get_new_inode(file_type f_type, uint16_t permissions)

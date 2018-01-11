@@ -20,4 +20,6 @@
 #define EDID_INVALID_ID     -13
 #define EFID_INVALID_ID     -14
 
+#define EIND_INVALID_INODE  -15
+
 #endif

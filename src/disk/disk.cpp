@@ -2,7 +2,7 @@
 
 #include "../errors.h"
 
-int disk::create(std::string disk_name, std::size_t size)
+int disk::create(const std::string disk_name, std::size_t size)
 {
 	auto disk = new std::fstream;
 
@@ -29,7 +29,7 @@ int disk::create(std::string disk_name, std::size_t size)
     return 0;
 }
 
-int disk::load(std::string & disk_name)
+int disk::load(const std::string & disk_name)
 {
 	auto disk = new std::fstream;
 

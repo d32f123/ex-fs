@@ -30,10 +30,10 @@ public:
 
 // DISK REGION ----------------
     // Create a new disk image
-    int init(std::string & disk_file, uint32_t inodes_count, 
+    int init(const std::string & disk_file, uint32_t inodes_count, 
         std::size_t disk_size, uint32_t block_size);
     // Load a disk image from a file
-    int load(std::string & disk_file);
+    int load(const std::string & disk_file);
     // Unload current disk image
     void unload();
     // Sync changes to disk image file
@@ -41,11 +41,11 @@ public:
 // END DISK REGION -------------
 
 // FILE REGION -----------------
-    int create(std::string & file_name);
-    int link(std::string & original_file, std::string & new_file);
-    int unlink(std::string & file);
+    int create(const std::string & file_name);
+    int link(const std::string & original_file, std::string & new_file);
+    int unlink(const std::string & file);
     // Open a file
-    fid_t open(std::string & disk_file);
+    fid_t open(const std::string & disk_file);
     // Close a file
     int close(fid_t fid);
 
@@ -57,12 +57,12 @@ public:
     int trunc(fid_t fid, std::size_t new_length);
 // END FILE REGION -------------
 // DIRECTORY REGION ------------
-    int mkdir(std::string & dir_name);
+    int mkdir(const std::string & dir_name);
     // must be empty
-    int rmdir(std::string & dir_name);
+    int rmdir(const std::string & dir_name);
 
     // create a dir class, that will implement the read operations et c.
-    did_t opendir(std::string & dir_name);
+    did_t opendir(const std::string & dir_name);
     int closedir(did_t dir_id);
 
     dirent_t readdir(did_t dir_id);
@@ -99,7 +99,7 @@ private:
     uint32_t get_free_inode();
     void set_inode_status(uint32_t inode_num, bool is_busy);
 
-    int get_inode_by_path(std::string & path, uint32_t * inode_out);
+    int get_inode_by_path(const std::string & path, uint32_t * inode_out);
 
     friend class file;
 };

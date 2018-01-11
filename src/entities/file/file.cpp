@@ -18,6 +18,13 @@ void file::reopen(uint32_t inode_n, file_system * file_sys)
     fs->read_inode(inode_n, &inode); 
 }
 
+int file::get_inode(inode_t * inode_out)
+{
+    inode_t ret;
+    auto error = fs->read_inode(inode_n_, inode_out);
+    return error;
+}
+
 int file::read(char * buffer, std::size_t size)
 {
     uint32_t block_size_bytes = fs->super_block_.block_size * SECTOR_SIZE;
@@ -52,7 +59,7 @@ int file::trunc(std::size_t new_size)
 
     uint32_t block_size_bytes = fs->super_block_.block_size * SECTOR_SIZE;
     uint32_t free_blocks = new_size / block_size_bytes + (new_size % block_size_bytes != 0);
-    // todo: fix curr_pos
+
     for (uint32_t i = free_blocks; i < INODE_BLOCKS_MAX; ++i)
     {
         if (inode.blocks[i] != 0)
@@ -132,6 +139,9 @@ int file::trunc(std::size_t new_size)
         delete[] second_buffer;
     }
 
+    if (curr_pos >= new_size)
+        curr_pos = 0;
+        
     return 0;
 }
 
