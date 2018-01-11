@@ -3,20 +3,41 @@
 
 #include <iomanip>
 
-struct HexCharStruct
+struct hex_char_struct
 {
   unsigned char c;
-  HexCharStruct(unsigned char _c) : c(_c) { }
+  hex_char_struct(unsigned char _c) : c(_c) { }
 };
 
-inline std::ostream& operator<<(std::ostream& o, const HexCharStruct& hs)
+inline std::ostream& operator<<(std::ostream& o, const hex_char_struct& hs)
 {
-  return (o << std::setw(2) << std::setfill('0') << std::hex << (int)hs.c);
+  return (o << std::setw(2) << std::setfill('0') << std::hex << static_cast<int>(hs.c));
 }
 
-inline HexCharStruct hex(unsigned char _c)
+inline hex_char_struct hex(unsigned char _c)
 {
-  return HexCharStruct(_c);
+  return {_c};
+}
+
+space_map::space_map(const space_map& that)
+{
+	bytes_count_ = that.bytes_count_;
+	bits_count_ = that.bits_count_;
+	bits_arr = new uint8_t[bytes_count_];
+	memcpy(this->bits_arr, that.bits_arr, sizeof(uint8_t) * bytes_count_);
+}
+
+space_map& space_map::operator=(const space_map& that)
+{
+	if (this != &that)
+	{
+		delete[] bits_arr;
+		bytes_count_ = that.bytes_count_;
+		bits_count_ = that.bits_count_;
+		bits_arr = new uint8_t[bytes_count_];
+		memcpy(this->bits_arr, that.bits_arr, sizeof(uint8_t) * bytes_count_);
+	}
+	return *this;
 }
 
 space_map::space_map(uint32_t bits_n)

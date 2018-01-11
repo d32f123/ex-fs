@@ -53,17 +53,26 @@ int prompt_user(const std::vector<std::string> & options)
     return ret;
 }
 
-void do_ls(file_system * fs, const std::string & curr_dir = "/", int depth = 1)
+void do_ls(file_system * fs, const std::string & curr_dir = "/", int depth = 0)
 {
     auto root_id = fs->opendir(curr_dir);
-    do {
-        auto dirent = fs->readdir(root_id);
+	dirent_t dirent;
+    while ((dirent = fs->readdir(root_id)).inode_n != INODE_INVALID) 
+	{
         //auto file_id = fs->open(curr_dir + "/" + dirent.name);
         /// ASDASDASDSAD
-        for (int i = 0; i < depth; ++i)
+        for (auto i = 0; i < depth; ++i)
             cout << '\t';
-        cout << dirent.name;
-    } while (true);
+        cout << dirent.name << ":" << static_cast<int>(dirent.f_type);
+		if (dirent.f_type == file_type::dir)
+			do_ls(fs, curr_dir + "/" + dirent.name, depth + 1);
+    }
+}
+
+void do_create(file_system * fs, const std::string & filename)
+{
+	fs->create(filename);
+	cout << "File created" << endl;
 }
 
 int exec_command(const std::vector<std::string> & args, file_system * fs)
@@ -72,6 +81,10 @@ int exec_command(const std::vector<std::string> & args, file_system * fs)
     {
         do_ls(fs);
     }
+	if (args[0] == "create")
+	{
+		do_create(fs, args[1]);
+	}
     return 0;
 }
 
@@ -95,6 +108,7 @@ int main()
         while (true)
         {
             std::string full_command;
+			cout << PROMPT_STR;
             std::getline(cin, full_command);
 
             auto args = split(full_command, ' ');

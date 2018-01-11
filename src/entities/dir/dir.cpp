@@ -1,3 +1,4 @@
+#define _CRT_SECURE_NO_WARNINGS
 #include "dir.h"
 
 #include "../../errors.h"
@@ -5,9 +6,13 @@
 
 #include <string.h>
 
+directory::directory(const directory & that) : file_(new file(that.file_->inode_n_, that.file_->fs_))
+{
+}
+
 directory::directory(uint32_t inode_n, file_system * fs) : file_(new file(inode_n, fs))
 {
-    if (file_->inode.f_type != file_type::dir)
+    if (file_->inode_.f_type != file_type::dir)
         throw std::string("Not a directory");
 }
 
@@ -18,7 +23,7 @@ directory::directory(file & dir_file) : file_(&dir_file)
 void directory::reopen(uint32_t inode_n, file_system * fs)
 {
     file_->reopen(inode_n, fs);
-    if (file_->inode.f_type != file_type::dir)
+    if (file_->inode_.f_type != file_type::dir)
         throw std::string("Not a directory");
 }
 
@@ -29,7 +34,9 @@ dirent_t directory::find(std::string & filename)
     
     dirent_t dirent;
     do {
-        file_->read(reinterpret_cast<char *>(&dirent), sizeof(dirent_t));
+        auto ret = file_->read(reinterpret_cast<char *>(&dirent), sizeof(dirent_t));
+		if (ret < 0)
+			break;
         auto curr_filename = std::string(dirent.name);
         if (curr_filename == filename)
         {
@@ -48,7 +55,10 @@ dirent_t directory::find(std::string & filename)
 dirent_t directory::read()
 {
     dirent_t dirent;
-    file_->read(reinterpret_cast<char *>(&dirent), sizeof(dirent_t));
+    auto ret = file_->read(reinterpret_cast<char *>(&dirent), sizeof(dirent_t));
+
+	if (ret < 0)
+		return DIRENT_INVALID;
     
     if (dirent.inode_n == INODE_INVALID)
         file_->seek(file_->get_curr_pos() - sizeof(dirent_t));
@@ -60,6 +70,16 @@ void directory::rewind()
     file_->seek(0);
 }
 
+directory & directory::operator=(const directory & that)
+{
+	if (this != &that)
+	{
+		delete file_;
+		file_ = new file(that.file_->inode_n_, that.file_->fs_);
+	}
+	return *this;
+}
+
 int directory::add_entry(uint32_t inode_n, std::string & filename)
 {
     dirent_t dirent = find(filename);
@@ -67,7 +87,7 @@ int directory::add_entry(uint32_t inode_n, std::string & filename)
     if (dirent.inode_n != INODE_INVALID)
         return EDIR_FILE_EXISTS;
 
-    file tmp = file(inode_n, file_->fs);
+    file tmp = file(inode_n, file_->fs_);
     inode_t inode;
     auto ret = tmp.get_inode(&inode);
 
@@ -81,10 +101,13 @@ int directory::add_entry(uint32_t inode_n, std::string & filename)
     auto prev_pos = file_->get_curr_pos();
 
     do {
-        file_->read(reinterpret_cast<char *>(&dirent), sizeof(dirent_t));
-    } while (dirent.inode_n != INODE_INVALID);
+        ret = file_->read(reinterpret_cast<char *>(&dirent), sizeof(dirent_t));
+    } while (dirent.inode_n != INODE_INVALID && ret == 0);
 
-    file_->seek(file_->get_curr_pos() - sizeof(dirent_t));
+	if (file_->get_curr_pos() >= sizeof(dirent_t))
+		file_->seek(file_->get_curr_pos() - sizeof(dirent_t));
+	else
+		file_->seek(0);
 
     file_->write(reinterpret_cast<char *>(&dirent), sizeof(dirent_t));
     

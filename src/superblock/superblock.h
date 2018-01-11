@@ -1,7 +1,7 @@
 #ifndef SUPERBLOCK_H_GUARD
 #define SUPERBLOCK_H_GUARD
 
-#include <inttypes.h>
+#include <cstdint>
 
 typedef struct super_block_struct
 {

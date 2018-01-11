@@ -1,9 +1,9 @@
 #ifndef DISK_H_GUARD
 #define DISK_H_GUARD
 
-#include <inttypes.h>
 #include <string>
 #include <fstream>
+#include <cstdint>
 
 #define SECTOR_SIZE (512)
 

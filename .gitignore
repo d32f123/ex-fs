@@ -4,6 +4,7 @@ obj/*
 .vscode/*
 nfso
 hey
+*.filters
 
 !/Makefile
 !/README.md

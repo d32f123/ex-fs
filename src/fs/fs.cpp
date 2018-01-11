@@ -137,7 +137,8 @@ int file_system::init(const std::string & disk_file, const uint32_t inodes_count
 
     inode_map_->set(true, INODE_ROOT_ID);
 
-    this->disk_.write_block(sb.inodemap_first_sector, reinterpret_cast<char *>(this->inode_map_->bits_arr), inodemap_size * block_size);
+    this->disk_.write_block(sb.inodemap_first_sector, 
+		reinterpret_cast<char *>(this->inode_map_->bits_arr), inodemap_size * block_size);
 
     // create root inode
     auto curr_time = time(NULL);
@@ -176,7 +177,7 @@ int file_system::create(const std::string & file_name)
         return EDIR_INVALID_PATH;
     
     uint32_t last_dir_inode;
-    auto dir_path = file_name.substr(0, last_slash);
+    auto dir_path = file_name.substr(0, last_slash + 1);
     auto small_name = file_name.substr(last_slash + 1, std::string::npos);
     auto ret = get_inode_by_path(dir_path, &last_dir_inode);
     if (ret < 0)
@@ -325,8 +326,7 @@ fid_t file_system::open(const std::string & disk_file)
     auto ret = get_inode_by_path(disk_file, &inode);
     if (ret < 0)
         return ret;
-    auto tmp = file(inode, this);
-    files_.push_back(tmp);
+    files_.push_back(*new file(inode, this));
     return files_.size() - 1;
 }
 
@@ -334,6 +334,7 @@ int file_system::close(fid_t fid)
 {
     if (fid > files_.size())
         return EFID_INVALID_ID;
+	delete &(files_[fid]);
     files_.erase(files_.begin() + fid);
     return 0;
 }
@@ -437,8 +438,7 @@ did_t file_system::opendir(const std::string & dir_name)
     auto ret = get_inode_by_path(dir_name, &dir_inode);
     if (ret < 0)
         return ret;
-    auto dir = directory(dir_inode, this);
-    dirs_.push_back(dir);
+	dirs_.push_back(*new directory(dir_inode, this));
     return dirs_.size() - 1;
 }
 
@@ -446,6 +446,7 @@ int file_system::closedir(did_t dir_id)
 {
     if (dir_id > dirs_.size())
         return EDID_INVALID_ID;
+	delete &(dirs_[dir_id]);
     dirs_.erase(dirs_.begin() + dir_id);
     return 0;
 }
@@ -613,12 +614,8 @@ int file_system::write_object(uint32_t start_sector, std::size_t offset, std::si
 
 int file_system::write_inode(uint32_t inode_id, const inode_t * inode)
 {
-    if (!inode_map_->get(inode_id))
-    {
-        return EIND_INVALID_INODE;
-    }
     uint32_t sector = super_block_.inode_first_sector + (inode_id * sizeof(inode_t) / SECTOR_SIZE);
-    return write_object(sector, (inode_id * sizeof(inode_t)) % SECTOR_SIZE, sizeof(inode_t), &inode);
+    return write_object(sector, (inode_id * sizeof(inode_t)) % SECTOR_SIZE, sizeof(inode_t), inode);
 }
 
 int file_system::read_inode(uint32_t inode_id, inode_t * inode)

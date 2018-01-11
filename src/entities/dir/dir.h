@@ -2,7 +2,7 @@
 #define DIR_H_GUARD
 
 #include <string>
-#include <stdint.h>
+#include <cstdint>
 
 #include "../file/file.h"
 #include "dirent.h"
@@ -12,6 +12,7 @@ class file_system;
 class directory
 {
 public:
+	directory(const directory& that);
     // create a new dir
     directory(std::string & new_dir_name, file_system * fs);
     // open an existing dir
@@ -28,6 +29,8 @@ public:
     void rewind();
 
     ~directory() {delete file_;}
+
+	directory& operator=(const directory & that);
 private:
     file * file_;
 };

@@ -1,7 +1,7 @@
 #ifndef FS_H_GUARD
 #define FS_H_GUARD
 
-#include <stdlib.h>
+#include <cstdlib>
 #include <string>
 #include <fstream>
 #include <vector>
@@ -26,7 +26,9 @@ public:
         : file_system(16) {}
     /* TODO: CACHE */
 	explicit file_system(std::size_t)
-		: disk_ {}, data_buffer_{ nullptr }, super_block_{} {}
+		: data_buffer_{nullptr}, super_block_{}, inode_map_(nullptr), space_map_(nullptr)
+	{
+	}
 
 // DISK REGION ----------------
     // Create a new disk image
@@ -43,7 +45,7 @@ public:
 // FILE REGION -----------------
     int create(const std::string & file_name);
     int link(const std::string & original_file, std::string & new_file);
-    int unlink(const std::string & file);
+    int unlink(const std::string & file_name);
     // Open a file
     fid_t open(const std::string & disk_file);
     // Close a file
@@ -70,8 +72,8 @@ public:
 // END DIRECTORY REGION --------
 
     super_block_t get_super_block();
-    inline space_map * get_inode_map() { return inode_map_; }
-    inline space_map * get_space_map() { return space_map_; }
+    inline space_map * get_inode_map() const { return inode_map_; }
+    inline space_map * get_space_map() const { return space_map_; }
 private:
     disk disk_;
     char * data_buffer_;

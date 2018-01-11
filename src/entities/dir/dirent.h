@@ -12,6 +12,6 @@ typedef struct dirent_struct
     char name[DIRENT_NAME_MAX];
 } dirent_t;
 
-#define DIRENT_INVALID dirent_t{.inode_n = INODE_INVALID, file_type::other, ""}
+#define DIRENT_INVALID (dirent_t{INODE_INVALID, file_type::other, ""})
 
 #endif
