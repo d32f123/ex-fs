@@ -3,7 +3,9 @@
 
 #include <inttypes.h>
 
+#define INODE_ROOT_ID       0
 #define INODE_BLOCKS_MAX    8
+#define INODE_INVALID       (uint32_t)-1
 
 enum class file_type : uint8_t { regular = 0, dir = 1, other = 2 };
 

@@ -4,7 +4,6 @@
 #include <inttypes.h>
 #include <iostream>
 
-
 class space_map
 {
 public:
@@ -19,6 +18,8 @@ public:
 	void set(bool value, uint32_t index);
 
 	uint8_t * bits_arr;
+	uint32_t get_bytes_count() { return bytes_count_; }
+	uint32_t get_bits_count() { return bits_count_; }
 
 	friend std::ostream & operator<<(std::ostream & os, const space_map & sm);
 private:

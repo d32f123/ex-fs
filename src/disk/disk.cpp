@@ -1,5 +1,7 @@
 #include "disk.h"
 
+#include "../errors.h"
+
 int disk::create(std::string disk_name, std::size_t size)
 {
 	auto disk = new std::fstream;

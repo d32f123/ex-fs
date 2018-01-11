@@ -1,8 +1,6 @@
 #ifndef DISK_H_GUARD
 #define DISK_H_GUARD
 
-#include "../errors.h"
-
 #include <inttypes.h>
 #include <string>
 #include <fstream>

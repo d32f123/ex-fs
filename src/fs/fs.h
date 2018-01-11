@@ -4,14 +4,15 @@
 #include <stdlib.h>
 #include <string>
 #include <fstream>
+#include <vector>
 
 #include "../disk/disk.h"
-#include "../superblock/superblock.h"
-#include "../inode/inode.h"
-#include "../errors.h"
 #include "../spacemap/spacemap.h"
+#include "../superblock/superblock.h"
+#include "../entities/file/file.h"
 #include "../entities/dir/dir.h"
 #include "../entities/dir/dirent.h"
+#include "../inode/inode.h"
 
 typedef unsigned int fid_t;
 typedef unsigned int did_t;
@@ -19,6 +20,7 @@ typedef unsigned int did_t;
 class file_system
 {
 public: 
+    /* TODO: REMOVAL OF OPENED FILES AND DIRS CORRECTLY */
     // Default constructor
     file_system() 
         : file_system(16) {}
@@ -45,12 +47,14 @@ public:
     // Open a file
     fid_t open(std::string & disk_file);
     // Close a file
-    void close(fid_t fid);
+    int close(fid_t fid);
 
     int read(fid_t fid, char * buffer, std::size_t size);
-    int write(fid_t fid, char * buffer, std::size_t size);
+    int write(fid_t fid, const char * buffer, std::size_t size);
 
     int seek(fid_t fid, std::size_t pos);
+
+    int trunc(fid_t fid, std::size_t new_length);
 // END FILE REGION -------------
 // DIRECTORY REGION ------------
     int mkdir(std::string & dir_name);
@@ -62,9 +66,10 @@ public:
     int closedir(did_t dir_id);
 
     dirent_t readdir(did_t dir_id);
+    int rewind_dir(did_t dir_id);
 // END DIRECTORY REGION --------
 
-    inline super_block_t get_super_block() { return super_block_; }
+    super_block_t get_super_block();
     inline space_map * get_inode_map() { return inode_map_; }
     inline space_map * get_space_map() { return space_map_; }
 private:
@@ -74,13 +79,29 @@ private:
     space_map * inode_map_;
 	space_map * space_map_;
 
+    std::vector<file> files_;
+    std::vector<directory> dirs_;
+
+    uint32_t get_free_block();
+    void set_block_status(uint32_t block_id, bool is_busy);
+
+    // proxies for caching
+    int read_block(uint32_t start_sector, char * buffer, std::size_t size);
+    int write_block(uint32_t start_sector, const char * buffer, std::size_t size);
+
     int read_object(uint32_t start_sector, std::size_t offset, std::size_t obj_size, void * buffer);
     int write_object(uint32_t start_sector, std::size_t offset, std::size_t obj_size, const void * buffer);
 
+    int write_inode(uint32_t inode_id, const inode_t * inode);
+    int read_inode(uint32_t inode_id, inode_t * inode);
+
+    inode_t get_new_inode(file_type f_type, uint16_t permissions);
     uint32_t get_free_inode();
     void set_inode_status(uint32_t inode_num, bool is_busy);
-    
-    int do_mkdir(std::string & dir_name);
+
+    int get_inode_by_path(std::string & path, uint32_t * inode_out);
+
+    friend class file;
 };
 
 #endif
