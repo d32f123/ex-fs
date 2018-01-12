@@ -16,10 +16,12 @@
 
 #define EFIL_INVALID_POS    -11
 #define EFIL_INVALID_SECTOR -12
+#define EFIL_WRONG_TYPE		-17
 
 #define EDID_INVALID_ID     -13
 #define EFID_INVALID_ID     -14
 
 #define EIND_INVALID_INODE  -15
+#define EIND_OUT_OF_INODES	-16
 
 #endif

@@ -3,7 +3,22 @@
 #include "../../fs/fs.h"
 #include "../../errors.h"
 
-#include <string.h>
+#include <cstring>
+
+file::file(const std::string & filename, file_system * fs)
+{
+	uint32_t inode_n;
+	auto ret = fs->get_inode_by_path(filename, &inode_n);
+
+	if (ret < 0)
+		throw std::exception("bad filename");
+
+	fs_ = fs;
+	inode_n_ = inode_n;
+	curr_pos_ = 0;
+
+	fs->read_inode(inode_n, &inode_);
+}
 
 file::file(uint32_t inode_n, file_system * fs) : fs_(fs), inode_n_(inode_n), curr_pos_(0)
 {
@@ -20,7 +35,6 @@ void file::reopen(uint32_t inode_n, file_system * file_sys)
 
 int file::get_inode(inode_t * inode_out)
 {
-    inode_t ret;
     auto error = fs_->read_inode(inode_n_, inode_out);
     return error;
 }
@@ -72,7 +86,7 @@ int file::trunc(std::size_t new_size)
     if (inode_.indirect_block != 0)
     {
         uint32_t * buffer = reinterpret_cast<uint32_t *>(fs_->data_buffer_);
-        fs_->read_block(inode_.indirect_block, fs_->data_buffer_, fs_->super_block_.block_size);
+        fs_->read_data_block(inode_.indirect_block, fs_->data_buffer_, fs_->super_block_.block_size);
 
         if (free_blocks < INODE_BLOCKS_MAX)
             i = 0;
@@ -87,7 +101,7 @@ int file::trunc(std::size_t new_size)
                 buffer[i] = 0;
             }
         }
-        fs_->write_block(inode_.indirect_block, fs_->data_buffer_, fs_->super_block_.block_size);
+        fs_->write_data_block(inode_.indirect_block, fs_->data_buffer_, fs_->super_block_.block_size);
         if (free_blocks <= INODE_BLOCKS_MAX)
         {
             fs_->set_block_status(inode_.indirect_block, false);
@@ -99,9 +113,8 @@ int file::trunc(std::size_t new_size)
         uint32_t * buffer = reinterpret_cast<uint32_t *>(fs_->data_buffer_);
         uint32_t * second_buffer = new uint32_t[block_size_bytes / sizeof(uint32_t)];
 
-        fs_->read_block(inode_.double_indirect_block, fs_->data_buffer_, fs_->super_block_.block_size);
+        fs_->read_data_block(inode_.double_indirect_block, fs_->data_buffer_, fs_->super_block_.block_size);
 
-        i = (free_blocks - INODE_BLOCKS_MAX - (block_size_bytes / sizeof(uint32_t))) / (block_size_bytes / sizeof(uint32_t));
         if (free_blocks < INODE_BLOCKS_MAX + (block_size_bytes / sizeof(uint32_t)))
             i = 0;
         else
@@ -117,7 +130,7 @@ int file::trunc(std::size_t new_size)
         {
             if (buffer[i] != 0)
             {
-                fs_->read_block(buffer[i], reinterpret_cast<char *>(second_buffer), fs_->super_block_.block_size);
+                fs_->read_data_block(buffer[i], reinterpret_cast<char *>(second_buffer), fs_->super_block_.block_size);
                 for (; j < block_size_bytes; ++j)
                 {
                     if (second_buffer[j] != 0)
@@ -126,7 +139,7 @@ int file::trunc(std::size_t new_size)
                         second_buffer[j] = 0;
                     }
                 }
-                fs_->write_block(buffer[i], reinterpret_cast<char *>(second_buffer), fs_->super_block_.block_size);
+                fs_->write_data_block(buffer[i], reinterpret_cast<char *>(second_buffer), fs_->super_block_.block_size);
 
                 fs_->set_block_status(buffer[i], false);
                 buffer[i] = 0;
@@ -138,7 +151,7 @@ int file::trunc(std::size_t new_size)
         inode_.double_indirect_block = 0;
         delete[] second_buffer;
     }
-
+	fs_->write_inode(inode_n_, &inode_);
     if (curr_pos_ >= new_size)
         curr_pos_ = 0;
         
@@ -167,7 +180,7 @@ int file::read_unaligned(uint32_t start_block, std::size_t offset, std::size_t o
         if (curr_sector == 0)
             return EFIL_INVALID_SECTOR;
 
-        ret = fs_->read_block(curr_sector, fs_->data_buffer_, fs_->super_block_.block_size);
+        ret = fs_->read_data_block(curr_sector, fs_->data_buffer_, fs_->super_block_.block_size);
         if (ret < 0)
             return ret;
 
@@ -177,7 +190,7 @@ int file::read_unaligned(uint32_t start_block, std::size_t offset, std::size_t o
         offset = 0;
         ++i;
     }
-    return 0;
+    return obj_size;
 }
 
 int file::write_unaligned(uint32_t start_block, std::size_t offset, std::size_t obj_size, const void * buffer)
@@ -201,7 +214,7 @@ int file::write_unaligned(uint32_t start_block, std::size_t offset, std::size_t 
 
         if (copy_size == block_size_bytes)
         {
-            ret = fs_->write_block(curr_sector, reinterpret_cast<const char *>(buffer) + obj_pos, fs_->super_block_.block_size);
+            ret = fs_->write_data_block(curr_sector, reinterpret_cast<const char *>(buffer) + obj_pos, fs_->super_block_.block_size);
 
             if (ret < 0)
                 return ret;
@@ -211,12 +224,12 @@ int file::write_unaligned(uint32_t start_block, std::size_t offset, std::size_t 
             continue;
         }
 
-        ret = fs_->read_block(curr_sector, fs_->data_buffer_, fs_->super_block_.block_size);
+        ret = fs_->read_data_block(curr_sector, fs_->data_buffer_, fs_->super_block_.block_size);
         if (ret < 0)
             return ret;
         
         memcpy(fs_->data_buffer_ + offset, reinterpret_cast<const char *>(buffer) + obj_pos, copy_size);
-		fs_->write_block(curr_sector, fs_->data_buffer_, fs_->super_block_.block_size);
+		fs_->write_data_block(curr_sector, fs_->data_buffer_, fs_->super_block_.block_size);
         obj_pos += copy_size;
         offset = 0;
         ++i;
@@ -247,7 +260,7 @@ int file::get_sector(uint32_t i, uint32_t * sector_out, bool do_allocate)
     {
         if (inode_.indirect_block == 0)
             return EFIL_INVALID_SECTOR;
-        ret = fs_->read_object(inode_.indirect_block, (i - INODE_BLOCKS_MAX) * sizeof(uint32_t), sizeof(uint32_t), sector_out);
+        ret = fs_->read_data_object(inode_.indirect_block, (i - INODE_BLOCKS_MAX) * sizeof(uint32_t), sizeof(uint32_t), sector_out);
         return ret;
     }
     // double indirect
@@ -260,13 +273,13 @@ int file::get_sector(uint32_t i, uint32_t * sector_out, bool do_allocate)
         if (inode_.double_indirect_block == 0)
             return EFIL_INVALID_SECTOR;
 
-        ret = fs_->read_object(inode_.double_indirect_block, index_level_1 * sizeof(uint32_t), sizeof(uint32_t), &pointer);
+        ret = fs_->read_data_object(inode_.double_indirect_block, index_level_1 * sizeof(uint32_t), sizeof(uint32_t), &pointer);
         if (ret < 0)
             return ret;
         if (pointer == 0)
             return EFIL_INVALID_SECTOR;
         
-        ret = fs_->read_object(pointer, index_level_2 * sizeof(uint32_t), sizeof(uint32_t), sector_out);
+        ret = fs_->read_data_object(pointer, index_level_2 * sizeof(uint32_t), sizeof(uint32_t), sector_out);
         return ret;
     }
     // out of bounds for sure
@@ -306,13 +319,13 @@ void file::allocate_block(uint32_t block_index)
             free_block = fs_->get_free_block();
 			fs_->write_inode(inode_n_, &inode_);
         }
-        ret = fs_->read_object(inode_.indirect_block, (block_index - INODE_BLOCKS_MAX) * sizeof(uint32_t), sizeof(uint32_t), &temp);
+        ret = fs_->read_data_object(inode_.indirect_block, (block_index - INODE_BLOCKS_MAX) * sizeof(uint32_t), sizeof(uint32_t), &temp);
         if (ret < 0)
             return;
         if (temp == 0)
         {
             fs_->set_block_status(free_block, true);
-            fs_->write_object(inode_.indirect_block, (block_index - INODE_BLOCKS_MAX) * sizeof(uint32_t), sizeof(uint32_t), &free_block);
+            fs_->write_data_object(inode_.indirect_block, (block_index - INODE_BLOCKS_MAX) * sizeof(uint32_t), sizeof(uint32_t), &free_block);
 			fs_->write_inode(inode_n_, &inode_);
         	return;
         }
@@ -332,26 +345,26 @@ void file::allocate_block(uint32_t block_index)
 			fs_->write_inode(inode_n_, &inode_);
         }
 
-        ret = fs_->read_object(inode_.double_indirect_block, index_level_1 * sizeof(uint32_t), sizeof(uint32_t), &pointer);
+        ret = fs_->read_data_object(inode_.double_indirect_block, index_level_1 * sizeof(uint32_t), sizeof(uint32_t), &pointer);
         if (ret < 0)
             return;
         if (pointer == 0)
         {
             fs_->set_block_status(free_block, true);
-            ret = fs_->write_object(inode_.double_indirect_block, index_level_1 * sizeof(uint32_t), sizeof(uint32_t), &free_block);
+            ret = fs_->write_data_object(inode_.double_indirect_block, index_level_1 * sizeof(uint32_t), sizeof(uint32_t), &free_block);
             if (ret < 0)
                 return;
             pointer = free_block;
             free_block = fs_->get_free_block();
         }
 
-        ret = fs_->read_object(pointer, index_level_2 * sizeof(uint32_t), sizeof(uint32_t), &temp);
+        ret = fs_->read_data_object(pointer, index_level_2 * sizeof(uint32_t), sizeof(uint32_t), &temp);
         if (ret < 0)
             return;
         if (temp == 0)
         {
             fs_->set_block_status(free_block, true);
-            ret = fs_->write_object(pointer, index_level_2 * sizeof(uint32_t), sizeof(uint32_t), &free_block);
+            fs_->write_data_object(pointer, index_level_2 * sizeof(uint32_t), sizeof(uint32_t), &free_block);
             return;
         }
     }

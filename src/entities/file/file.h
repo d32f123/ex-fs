@@ -2,6 +2,7 @@
 #define FILE_H_GUARD
 
 #include <cstdlib>
+#include <string>
 
 #include "../../inode/inode.h"
 
@@ -11,8 +12,10 @@ class directory;
 class file
 {
 public:
+	file() = default;
+	file(const std::string & filename, file_system * fs);
     file(uint32_t inode_n, file_system * fs);
-    void reopen(uint32_t inode_n, file_system * fs);
+    void reopen(uint32_t inode_n, file_system * file_sys);
 
     int read(char * buffer, std::size_t size);
     int write(const char * buffer, std::size_t size);
@@ -21,12 +24,13 @@ public:
 
     int trunc(std::size_t new_size);
 
-    std::size_t get_curr_pos() { return curr_pos_; }
+    std::size_t get_curr_pos() const { return curr_pos_; }
+	uint32_t get_inode_n() const { return inode_n_; }
 private:
-    file_system * fs_;
-    inode_t inode_;
-    uint32_t inode_n_;
-    std::size_t curr_pos_;
+    file_system * fs_{nullptr};
+    inode_t inode_{};
+    uint32_t inode_n_{INODE_INVALID};
+    std::size_t curr_pos_{0};
 
     int get_inode(inode_t * inode_out);
 

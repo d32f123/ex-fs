@@ -80,7 +80,7 @@ int disk::write_block(uint32_t start_sector, const char * buffer, const std::siz
     this->disk_file_->write(buffer, size * SECTOR_SIZE);
 
     if (this->disk_file_)
-        return 0;
+        return size;
     return EP_WRFIL;
 }
 
