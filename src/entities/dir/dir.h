@@ -15,29 +15,29 @@ public:
 	directory() = default;
 	directory(directory&& that) noexcept; // move constructor
 	directory(const directory& that); // copy constructor
-    // create a new dir
-    directory(const std::string & new_dir_name, file_system * fs);
-    // open an existing dir
-    directory(uint32_t inode_n, file_system * fs);
-	explicit directory(file & dir_file);
+	// create a new dir
+	directory(const std::string& new_dir_name, file_system* fs);
+	// open an existing dir
+	directory(uint32_t inode_n, file_system* fs);
+	explicit directory(file& dir_file);
 
-    void reopen(uint32_t inode_n, file_system * fs);
+	void reopen(uint32_t inode_n, file_system* fs) const;
 
-    int add_entry(uint32_t inode_n, const std::string & filename);
-    int remove_entry(const std::string & filename);
+	int add_entry(uint32_t inode_n, const std::string& filename) const;
+	int remove_entry(const std::string& filename) const;
 
-    dirent_t find(const std::string & filename);
-    dirent_t read();
-    void rewind();
+	dirent_t find(const std::string& filename) const;
+	dirent_t read() const;
+	void rewind() const;
 
-    ~directory() {delete file_;}
+	~directory() { delete file_; }
 
-	directory& operator=(const directory & that);
+	directory& operator=(const directory& that);
 	directory& operator=(directory&& that) noexcept;
 
-	file * get_file() const { return file_; }
+	file* get_file() const { return file_; }
 private:
-    file * file_{nullptr};
+	file* file_{nullptr};
 };
 
 #endif

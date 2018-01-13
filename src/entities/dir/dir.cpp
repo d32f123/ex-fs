@@ -14,7 +14,7 @@ directory::directory(directory&& that) noexcept
 
 directory::directory(const std::string& new_dir_name, file_system* fs)
 {
-	auto ret = fs->mkdir(new_dir_name);
+	const auto ret = fs->mkdir(new_dir_name);
 	if (ret < 0)
 		throw std::exception();
 
@@ -31,7 +31,7 @@ directory& directory::operator=(directory&& that) noexcept
 	return *this;
 }
 
-directory::directory(const directory & that)
+directory::directory(const directory& that)
 {
 	if (that.file_ == nullptr)
 		file_ = nullptr;
@@ -39,67 +39,67 @@ directory::directory(const directory & that)
 		file_ = new file(that.file_->inode_n_, that.file_->fs_);
 }
 
-directory::directory(uint32_t inode_n, file_system * fs) : file_(new file(inode_n, fs))
+directory::directory(uint32_t inode_n, file_system* fs) : file_(new file(inode_n, fs))
 {
-    if (file_->inode_.f_type != file_type::dir)
-        throw std::exception();
+	if (file_->inode_.f_type != file_type::dir)
+		throw std::exception();
 }
 
-directory::directory(file & dir_file) : file_(&dir_file)
+directory::directory(file& dir_file) : file_(&dir_file) {}
+
+void directory::reopen(uint32_t inode_n, file_system* fs) const
 {
+	file_->reopen(inode_n, fs);
+	if (file_->inode_.f_type != file_type::dir)
+		throw std::exception();
 }
 
-void directory::reopen(uint32_t inode_n, file_system * fs)
+dirent_t directory::find(const std::string& filename) const
 {
-    file_->reopen(inode_n, fs);
-    if (file_->inode_.f_type != file_type::dir)
-        throw std::exception();
-}
+	const int prev_pos = file_->get_curr_pos();
+	file_->seek(0);
 
-dirent_t directory::find(const std::string & filename)
-{
-    int prev_pos = file_->get_curr_pos();
-    file_->seek(0);
-    
-    dirent_t dirent;
-    do {
-        auto ret = file_->read(reinterpret_cast<char *>(&dirent), sizeof(dirent_t));
+	dirent_t dirent;
+	do
+	{
+		const auto ret = file_->read(reinterpret_cast<char *>(&dirent), sizeof(dirent_t));
 		if (ret < 0)
 			break;
-        auto curr_filename = std::string(dirent.name);
-        if (curr_filename == filename)
-        {
-            file_->seek(prev_pos);
-            return dirent;
-        }
-    } while (dirent.inode_n != INVALID_INODE);
-    
-    dirent.inode_n = INVALID_INODE;
-    dirent.name[0] = '\0';
+		const auto curr_filename = std::string(dirent.name);
+		if (curr_filename == filename)
+		{
+			file_->seek(prev_pos);
+			return dirent;
+		}
+	}
+	while (dirent.inode_n != INVALID_INODE);
 
-    file_->seek(prev_pos);
-    return dirent;
+	dirent.inode_n = INVALID_INODE;
+	dirent.name[0] = '\0';
+
+	file_->seek(prev_pos);
+	return dirent;
 }
 
-dirent_t directory::read()
+dirent_t directory::read() const
 {
-    dirent_t dirent;
-    auto ret = file_->read(reinterpret_cast<char *>(&dirent), sizeof(dirent_t));
+	dirent_t dirent;
+	const auto ret = file_->read(reinterpret_cast<char *>(&dirent), sizeof(dirent_t));
 
 	if (ret < 0)
 		return INVALID_DIRENT;
-    
-    if (dirent.inode_n == INVALID_INODE)
-        file_->seek(file_->get_curr_pos() - sizeof(dirent_t));
-    return dirent;
+
+	if (dirent.inode_n == INVALID_INODE)
+		file_->seek(file_->get_curr_pos() - sizeof(dirent_t));
+	return dirent;
 }
 
-void directory::rewind()
+void directory::rewind() const
 {
-    file_->seek(0);
+	file_->seek(0);
 }
 
-directory & directory::operator=(const directory & that)
+directory& directory::operator=(const directory& that)
 {
 	if (this != &that)
 	{
@@ -109,25 +109,27 @@ directory & directory::operator=(const directory & that)
 	return *this;
 }
 
-int directory::add_entry(uint32_t inode_n, const std::string & filename)
+int directory::add_entry(uint32_t inode_n, const std::string& filename) const
 {
-    dirent_t dirent = find(filename);
+	auto dirent = find(filename);
 
-    if (dirent.inode_n != INVALID_INODE)
-        return EDIR_FILE_EXISTS;
+	if (dirent.inode_n != INVALID_INODE)
+		return EDIR_FILE_EXISTS;
 
-    file tmp = file(inode_n, file_->fs_);
-    inode_t inode;
-    auto ret = tmp.get_inode(&inode);
+	auto tmp = file(inode_n, file_->fs_);
+	inode_t inode;
+	auto ret = tmp.get_inode(&inode);
 
-    if (ret < 0)
-        return ret;
+	if (ret < 0)
+		return ret;
 
-    auto prev_pos = file_->get_curr_pos();
+	const auto prev_pos = file_->get_curr_pos();
 
-    do {
-        ret = file_->read(reinterpret_cast<char *>(&dirent), sizeof(dirent_t));
-    } while (dirent.inode_n != INVALID_INODE && ret >= 0);
+	do
+	{
+		ret = file_->read(reinterpret_cast<char *>(&dirent), sizeof(dirent_t));
+	}
+	while (dirent.inode_n != INVALID_INODE && ret >= 0);
 
 	dirent.inode_n = inode_n;
 	dirent.f_type = inode.f_type;
@@ -138,67 +140,68 @@ int directory::add_entry(uint32_t inode_n, const std::string & filename)
 	else
 		file_->seek(0);
 
-    ret = file_->write(reinterpret_cast<char *>(&dirent), sizeof(dirent_t));
-	if (ret < 0)
-		return ret;
-    
-    dirent.inode_n = INVALID_INODE;
-    dirent.name[0] = '\0';
-
-    ret = file_->write(reinterpret_cast<char *>(&dirent), sizeof(dirent_t));
+	ret = file_->write(reinterpret_cast<char *>(&dirent), sizeof(dirent_t));
 	if (ret < 0)
 		return ret;
 
-    file_->seek(prev_pos);
+	dirent.inode_n = INVALID_INODE;
+	dirent.name[0] = '\0';
 
-    return 0;
+	ret = file_->write(reinterpret_cast<char *>(&dirent), sizeof(dirent_t));
+	if (ret < 0)
+		return ret;
+
+	file_->seek(prev_pos);
+
+	return 0;
 }
 
-int directory::remove_entry(const std::string & filename)
+int directory::remove_entry(const std::string& filename) const
 {
-    // TODO: MACRO ERROR CHECK ASSERT
-    std::size_t deleted_pos;
-    std::size_t end_pos;
-    auto prev_pos = file_->get_curr_pos();
+	const auto prev_pos = file_->get_curr_pos();
 
-    dirent_t dirent;
+	dirent_t dirent;
 
-    do {
-        file_->read(reinterpret_cast<char *>(&dirent), sizeof(dirent_t));
-        auto curr_filename = std::string(dirent.name);
-        if (curr_filename == filename)
-            break;
-    } while (dirent.inode_n != INVALID_INODE);
+	do
+	{
+		file_->read(reinterpret_cast<char *>(&dirent), sizeof(dirent_t));
+		const auto curr_filename = std::string(dirent.name);
+		if (curr_filename == filename)
+			break;
+	}
+	while (dirent.inode_n != INVALID_INODE);
 
-    if (dirent.inode_n == INVALID_INODE)
-        return EDIR_FILE_NOT_FOUND;
+	if (dirent.inode_n == INVALID_INODE)
+		return EDIR_FILE_NOT_FOUND;
 
-    deleted_pos = file_->get_curr_pos() - sizeof(dirent_t);
+	const auto deleted_pos = file_->get_curr_pos() - sizeof(dirent_t);
 
-    do {
-        file_->read(reinterpret_cast<char *>(&dirent), sizeof(dirent_t));
-    } while (dirent.inode_n != INVALID_INODE);
-    end_pos = file_->get_curr_pos() - sizeof(dirent_t);
+	do
+	{
+		file_->read(reinterpret_cast<char *>(&dirent), sizeof(dirent_t));
+	}
+	while (dirent.inode_n != INVALID_INODE);
+	const auto end_pos = file_->get_curr_pos() - sizeof(dirent_t);
 
-    char * buffer = new char[end_pos - deleted_pos];
+	char* buffer = new char[end_pos - deleted_pos];
 
-    file_->seek(deleted_pos + sizeof(dirent_t));
-    file_->read(buffer, end_pos - deleted_pos - sizeof(dirent_t));
+	file_->seek(deleted_pos + sizeof(dirent_t));
+	file_->read(buffer, end_pos - deleted_pos - sizeof(dirent_t));
 
-    dirent.inode_n = -1;
-    dirent.name[0] = '\0';
+	dirent.inode_n = -1;
+	dirent.name[0] = '\0';
 
-    reinterpret_cast<dirent_t *>(buffer)
-        [(end_pos - deleted_pos) / sizeof(dirent_t) - 1] = dirent;
+	reinterpret_cast<dirent_t *>(buffer)
+		[(end_pos - deleted_pos) / sizeof(dirent_t) - 1] = dirent;
 
-    file_->seek(deleted_pos);
-    file_->write(buffer, end_pos - deleted_pos);
+	file_->seek(deleted_pos);
+	file_->write(buffer, end_pos - deleted_pos);
 
-    file_->trunc(end_pos);
-    delete[] buffer;
+	file_->trunc(end_pos);
+	delete[] buffer;
 
-    if (prev_pos > deleted_pos)
-        file_->seek(0);
+	if (prev_pos > deleted_pos)
+		file_->seek(0);
 
-    return 0;
+	return 0;
 }

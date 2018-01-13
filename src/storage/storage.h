@@ -13,11 +13,11 @@ class storage
 public:
 	explicit storage(std::size_t size);
 
-	std::size_t insert(const T & elem);
+	std::size_t insert(const T& elem);
 	void remove(std::size_t index) const;
 
 	T& get(std::size_t index);
-	void set(std::size_t index, const T & elem);
+	void set(std::size_t index, const T& elem);
 
 	T& operator[](const std::size_t index) { return get(index); }
 
@@ -31,17 +31,15 @@ public:
 
 	~storage();
 private:
-	T * arr_;
+	T* arr_;
 	std::size_t arr_size_;
-	space_map * arr_map_;
+	space_map* arr_map_;
 	void clean_arr() const;
 };
 
 template <typename T>
-storage<T>::storage(const std::size_t size) 
-	: arr_(new T[size]), arr_size_(size), arr_map_(new space_map(size))
-{
-}
+storage<T>::storage(const std::size_t size)
+	: arr_(new T[size]), arr_size_(size), arr_map_(new space_map(size)) {}
 
 template <typename T>
 std::size_t storage<T>::insert(const T& elem)
@@ -79,7 +77,7 @@ void storage<T>::set(const std::size_t index, const T& elem)
 template <typename T>
 void storage<T>::resize(const std::size_t new_size)
 {
-	T * temp = new T[new_size];
+	T* temp = new T[new_size];
 
 	for (std::size_t i = 0; i < new_size; ++i)
 	{

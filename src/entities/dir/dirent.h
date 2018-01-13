@@ -3,15 +3,13 @@
 
 #define DIRENT_NAME_MAX (32)
 
-#include <iostream>
-
 #include "../../inode/inode.h"
 
 typedef struct dirent_struct
 {
-    uint32_t inode_n;
-    file_type f_type;
-    char name[DIRENT_NAME_MAX];
+	uint32_t inode_n;
+	file_type f_type;
+	char name[DIRENT_NAME_MAX];
 } dirent_t;
 
 inline std::ostream& operator<<(std::ostream& os, dirent_struct d)

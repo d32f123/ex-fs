@@ -73,7 +73,7 @@ inline std::ostream& operator<<(std::ostream& o, const hex_char_struct& hs)
 
 inline hex_char_struct hex(unsigned char _c)
 {
-	return { _c };
+	return {_c};
 }
 
 #endif

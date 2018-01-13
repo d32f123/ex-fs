@@ -5,21 +5,22 @@
 #include <cstdlib>
 #include <cstring>
 #include <exception>
+#include <utility>
 
 #define INVALID_NODE	(static_cast<std::size_t>(-1))
 
 template <typename TKey, typename TVal>
 struct node;
 
-template<typename TKey, typename TVal>
+template <typename TKey, typename TVal>
 class cache
 {
 public:
-	explicit cache(const std::size_t size) 
+	explicit cache(const std::size_t size)
 		: size_{size}, nodes_{new node<TKey, TVal>[size]} {}
 
 	void insert(const TKey& key, const TVal& elem);
-	bool contains(const TKey & key);
+	bool contains(const TKey& key);
 	TVal& get(const TKey& key);
 	void clear() { count_ = 0; }
 
@@ -31,23 +32,25 @@ public:
 
 	~cache();
 private:
-	std::size_t count_ {0};
+	std::size_t count_{0};
 	std::size_t size_;
-	std::size_t head_ {INVALID_NODE};
-	std::size_t tail_ {INVALID_NODE};
-	node<TKey, TVal> * nodes_;
+	std::size_t head_{INVALID_NODE};
+	std::size_t tail_{INVALID_NODE};
+	node<TKey, TVal>* nodes_;
 
 	std::size_t get_index(const TKey& key);
 	void set_head(std::size_t index);
 };
 
-template<typename TKey, typename TVal>
+template <typename TKey, typename TVal>
 struct node
 {
 	node() = default;
 	node(TKey key, TVal val) : node(key, val, INVALID_NODE, INVALID_NODE) {}
-	node(TKey key, TVal val, const std::size_t ll, const std::size_t rl) 
-		: key{ key }, val{ val }, left_link{ ll }, right_link{ rl } {}
+
+	node(TKey key, TVal val, const std::size_t ll, const std::size_t rl)
+		: key{key}, val{std::move(val)}, left_link{ll}, right_link{rl} {}
+
 	TKey key{};
 	TVal val{};
 	std::size_t left_link{INVALID_NODE};
@@ -167,7 +170,8 @@ cache<TKey, TVal>& cache<TKey, TVal>::operator=(const cache& that)
 
 	nodes_ = new node<TKey, TVal>[size_];
 
-	memcpy(nodes_, that.nodes_, sizeof(node<TKey, TVal>) * size_);
+	for (std::size_t i = 0; i < size_; ++i)
+		nodes_[i] = std::copy(that.nodes_[i]);
 
 	return *this;
 }

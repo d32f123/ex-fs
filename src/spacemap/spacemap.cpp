@@ -6,18 +6,18 @@
 
 struct hex_char_struct
 {
-  unsigned char c;
-  hex_char_struct(unsigned char _c) : c(_c) { }
+	unsigned char c;
+	hex_char_struct(unsigned char _c) : c(_c) { }
 };
 
 inline std::ostream& operator<<(std::ostream& o, const hex_char_struct& hs)
 {
-  return (o << std::setw(2) << std::setfill('0') << std::hex << static_cast<int>(hs.c));
+	return (o << std::setw(2) << std::setfill('0') << std::hex << static_cast<int>(hs.c));
 }
 
 inline hex_char_struct hex(unsigned char _c)
 {
-  return {_c};
+	return {_c};
 }
 
 space_map::space_map(const space_map& that)
@@ -48,7 +48,7 @@ space_map::space_map(const std::size_t bits_n)
 	bits_count_ = bits_n;
 }
 
-space_map::space_map(uint8_t * const bits_arr, const std::size_t bits_n)
+space_map::space_map(uint8_t* const bits_arr, const std::size_t bits_n)
 {
 	bytes_count_ = bits_n / 8 + ((bits_n % 8) != 0);
 	this->bits_arr = new uint8_t[bytes_count_];
@@ -97,7 +97,7 @@ std::size_t space_map::find_first_of(const bool val) const
 	return std::numeric_limits<std::size_t>::max();
 }
 
-std::ostream & operator<<(std::ostream & os, const space_map & sm)
+std::ostream& operator<<(std::ostream& os, const space_map& sm)
 {
 	for (uint32_t i = 0; i < sm.bytes_count_; ++i)
 	{
