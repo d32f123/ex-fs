@@ -21,11 +21,11 @@ typedef struct inode_struct
 	uint16_t permissions{};
 
 	// time of last access
-	uint64_t access_time{};
+	mutable uint64_t access_time{};
 	// time of last change (perms or content)
-	uint64_t change_time{};
+	mutable uint64_t change_time{};
 	// time of last modification (only content)
-	uint64_t modify_time{};
+	mutable uint64_t modify_time{};
 
 	uint32_t links_count{};
 

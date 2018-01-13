@@ -171,7 +171,7 @@ cache<TKey, TVal>& cache<TKey, TVal>::operator=(const cache& that)
 	nodes_ = new node<TKey, TVal>[size_];
 
 	for (std::size_t i = 0; i < size_; ++i)
-		nodes_[i] = std::copy(that.nodes_[i]);
+		nodes_[i] = that.nodes_[i];
 
 	return *this;
 }

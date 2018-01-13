@@ -63,6 +63,10 @@ int file::write(const char* buffer, std::size_t size)
 	if (ret < 0)
 		return ret;
 
+	fs_->read_inode(inode_n_, &inode_);
+	inode_.modify_time = time(nullptr);
+	fs_->write_inode(inode_n_, &inode_);
+
 	return (curr_pos_ += size);
 }
 
@@ -153,6 +157,10 @@ int file::trunc(std::size_t new_size)
 	fs_->write_inode(inode_n_, &inode_);
 	if (curr_pos_ >= new_size)
 		curr_pos_ = 0;
+
+	fs_->read_inode(inode_n_, &inode_);
+	inode_.modify_time = time(nullptr);
+	fs_->write_inode(inode_n_, &inode_);
 
 	return 0;
 }

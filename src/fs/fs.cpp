@@ -351,8 +351,12 @@ int file_system::init(const std::string& disk_file, const uint32_t inodes_count,
 
 	// init cwd
 	cwd_ = directory(INODE_ROOT_ID, this);
-	cwd_.add_entry(INODE_ROOT_ID, ".");
-	cwd_.add_entry(INODE_ROOT_ID, "..");
+	ret = cwd_.add_entry(INODE_ROOT_ID, ".");
+	if (ret < 0)
+		return ret;
+	ret = cwd_.add_entry(INODE_ROOT_ID, "..");
+	if (ret < 0)
+		return ret;
 
 	return 0;
 }
@@ -406,7 +410,9 @@ int file_system::link(const std::string& original_file, const std::string& new_f
 		return ret;
 
 	// add entry
-	dir.add_entry(orig_file_inode, small_name);
+	ret = dir.add_entry(orig_file_inode, small_name);
+	if (ret < 0)
+		return ret;
 	return 0;
 }
 
@@ -729,7 +735,9 @@ int file_system::do_unlink(const std::string& file_name, bool force)
 			return ret;
 	}
 	// remove file from directory
-	dir.remove_entry(small_name);
+	ret = dir.remove_entry(small_name);
+	if (ret < 0)
+		return ret;
 
 	return 0;
 }
@@ -774,7 +782,9 @@ int file_system::do_create(const std::string& file_name, file_type f_type,
 		return ret;
 
 	set_inode_status(inode_num, true);
-	dir.add_entry(inode_num, small_name);
+	ret = dir.add_entry(inode_num, small_name);
+	if (ret < 0)
+		return ret;
 
 	if (inode_out != nullptr)
 		(*inode_out) = inode_num;
@@ -1002,6 +1012,10 @@ int file_system::write_data_object(uint32_t start_block, std::size_t offset, std
 
 int file_system::write_inode(uint32_t inode_id, const inode_t* inode)
 {
+	const auto t = time(nullptr);
+	inode->access_time = t;
+	inode->change_time = t;
+
 	const auto block = super_block_.inode_first_block + inode_id * sizeof(inode_t) / (super_block_.block_size * SECTOR_SIZE
 	);
 	return write_object(block, (inode_id * sizeof(inode_t)) % (super_block_.block_size * SECTOR_SIZE), sizeof(inode_t),
@@ -1016,8 +1030,12 @@ int file_system::read_inode(uint32_t inode_id, inode_t* inode)
 	}
 	const auto sector = super_block_.inode_first_block + inode_id * sizeof(inode_t) / (super_block_.block_size *
 		SECTOR_SIZE);
-	return read_object(sector, (inode_id * sizeof(inode_t)) % (super_block_.block_size * SECTOR_SIZE), sizeof(inode_t),
+	const auto ret = read_object(sector, (inode_id * sizeof(inode_t)) % (super_block_.block_size * SECTOR_SIZE), sizeof(inode_t),
 	                   inode);
+	if (ret < 0)
+		return ret;
+	inode->access_time = time(nullptr);
+	return ret;
 }
 
 inode_t file_system::get_new_inode(const file_type f_type, const uint16_t permissions)
