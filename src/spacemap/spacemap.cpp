@@ -2,6 +2,7 @@
 #include <cstring>
 
 #include <iomanip>
+#include <limits>
 
 struct hex_char_struct
 {

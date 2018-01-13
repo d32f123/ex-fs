@@ -2,6 +2,8 @@
 #define STORAGE_H_GUARD
 
 #include <cstdlib>
+#include <exception>
+#include <iostream>
 
 #include "../spacemap/spacemap.h"
 
@@ -54,7 +56,7 @@ template <typename T>
 void storage<T>::remove(const std::size_t index) const
 {
 	if (index >= arr_size_ || !(*arr_map_)[index])
-		throw std::exception("invalid index");
+		throw std::exception();
 	arr_map_->set(false, index);
 }
 
@@ -62,7 +64,7 @@ template <typename T>
 T& storage<T>::get(const std::size_t index)
 {
 	if (index >= arr_size_ || !(*arr_map_)[index])
-		throw std::exception("invalid index");
+		throw std::exception();
 	return arr_[index];
 }
 
@@ -70,7 +72,7 @@ template <typename T>
 void storage<T>::set(const std::size_t index, const T& elem)
 {
 	if (index >= arr_size_ || !(*arr_map_)[index])
-		throw std::exception("invalid index");
+		throw std::exception();
 	arr_[index] = elem;
 }
 

@@ -1,3 +1,4 @@
+#include <cstring>
 #include <iostream>
 #include <string>
 #include <vector>
@@ -5,28 +6,13 @@
 #include <iomanip>
 
 #include "./fs/fs.h"
+#include "errors.h"
 
 #define PROMPT_STR      ("> ")
 
 using namespace std;
 
 extern std::vector<std::string> split(const std::string &text, char sep);
-
-struct hex_char_struct
-{
-	unsigned char c;
-	hex_char_struct(unsigned char _c) : c(_c) { }
-};
-
-inline std::ostream& operator<<(std::ostream& o, const hex_char_struct& hs)
-{
-	return (o << setw(2) << setfill('0') << hex << static_cast<int>(hs.c));
-}
-
-inline hex_char_struct hex(unsigned char _c)
-{
-	return { _c };
-}
 
 int create_fs(file_system * fs);
 int load_fs(file_system * fs);
@@ -74,7 +60,7 @@ void do_ls(file_system * fs, const std::string & curr_dir, int depth = 0)
 {
     const auto root_id = fs->opendir(curr_dir);
 	dirent_t dirent;
-    while ((dirent = fs->readdir(root_id)).inode_n != INODE_INVALID) 
+    while ((dirent = fs->readdir(root_id)).inode_n != INVALID_INODE) 
 	{
         for (auto i = 0; i < depth; ++i)
             cout << '\t';
@@ -85,37 +71,38 @@ void do_ls(file_system * fs, const std::string & curr_dir, int depth = 0)
 			do_ls(fs, file_system::concat_paths(curr_dir, dirent.name), depth + 1);
 		}
     }
+	// ReSharper disable once CppExpressionWithoutSideEffects
 	fs->closedir(root_id);
 }
 
 void do_create(file_system * fs, const std::string & filename)
 {
-	cout << fs->create(filename) << endl;
+	cout << err_to_string(fs->create(filename)) << endl;
 }
 
 void do_mkdir(file_system * fs, const std::string & dirname)
 {
-	cout << fs->mkdir(dirname) << endl;
+	cout << err_to_string(fs->mkdir(dirname)) << endl;
 }
 
 void do_cd(file_system * fs, const std::string & dirname)
 {
-	cout << fs->cd(dirname) << endl;
+	cout << err_to_string(fs->cd(dirname)) << endl;
 }
 
 void do_link(file_system * fs, const std::string & orig, const std::string & new_file)
 {
-	cout << fs->link(orig, new_file) << endl;
+	cout << err_to_string(fs->link(orig, new_file)) << endl;
 }
 
 void do_unlink(file_system * fs, const std::string & file)
 {
-	cout << fs->unlink(file) << endl;
+	cout << err_to_string(fs->unlink(file)) << endl;
 }
 
 void do_rmdir(file_system * fs, const std::string & file)
 {
-	cout << fs->rmdir(file) << endl;
+	cout << err_to_string(fs->rmdir(file)) << endl;
 }
 
 void do_opendir(file_system * fs, const std::string & file)
@@ -125,7 +112,7 @@ void do_opendir(file_system * fs, const std::string & file)
 
 void do_closedir(file_system * fs, did_t did)
 {
-	cout << fs->closedir(did) << endl;
+	cout << err_to_string(fs->closedir(did)) << endl;
 }
 
 void do_readdir(file_system * fs, did_t did)
@@ -140,39 +127,51 @@ void do_open(file_system * fs, const std::string & file)
 
 void do_close(file_system * fs, fid_t fid)
 {
-	cout << fs->close(fid) << endl;
+	cout << err_to_string(fs->close(fid)) << endl;
 }
 
 void do_read(file_system * fs, fid_t fid, const std::size_t size)
 {
 	char * buffer = new char[size];
-	cout << fs->read(fid, buffer, size) << endl;
+	cout << err_to_string(fs->read(fid, buffer, size)) << endl;
 	for (std::size_t i = 0; i < size; ++i)
 	{
 		if (i % 16 == 0)
 			cout << endl << setw(4) << setfill('0') << hex << static_cast<int>(i << 4) << dec << ": ";
 		cout << buffer[i];
 	}
+	cout << endl;
 }
 
 void do_write(file_system * fs, fid_t fid, const std::string & input)
 {
-	cout << fs->write(fid, input.c_str(), input.size()) << endl;
+	const auto ret = fs->write(fid, input.c_str(), input.size());
+	if (ret < 0)
+		cout << err_to_string(ret) << endl;
+	else
+		cout << ret << endl;
 }
 
 void do_trunc(file_system * fs, fid_t fid, std::size_t new_size)
 {
-	cout << fs->trunc(fid, new_size) << endl;
+	const auto ret = fs->trunc(fid, new_size);
+	if (ret < 0)
+		cout << err_to_string(ret) << endl;
+	else
+		cout << ret << endl;
 }
 
 void do_seek(file_system * fs, fid_t fid, std::size_t new_pos)
 {
-	cout << fs->seek(fid, new_pos) << endl;
+	const auto ret = fs->seek(fid, new_pos);
+	if (ret < 0)
+		cout << err_to_string(ret) << endl;
+	cout << ret << endl;
 }
 
 void do_rewind(file_system * fs, did_t did)
 {
-	cout << fs->rewind_dir(did) << endl;
+	cout << err_to_string(fs->rewind_dir(did)) << endl;
 }
 
 int exec_command(const std::vector<std::string> & args, file_system * fs)
@@ -248,6 +247,14 @@ int exec_command(const std::vector<std::string> & args, file_system * fs)
 	{
 		do_seek(fs, stoul(args[1]), stoul(args[2]));
 	}
+	if (args[0] == "trace")
+	{
+		fs->trace();
+	}
+	if (args[0] == "tb" && args.size() > 1)
+	{
+		fs->traceblock(stoul(args[1]));
+	}
     return 0;
 }
 
@@ -277,8 +284,12 @@ int main()
             std::getline(cin, full_command);
 
             auto args = split(full_command, ' ');
-            if (args[0] == "exit")
-                break;
+			if (args[0] == "exit")
+			{
+				fs.sync();
+				fs.unload();
+				break;
+			}
             exec_command(args, &fs);
         }
     } while(true);

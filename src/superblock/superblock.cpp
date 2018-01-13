@@ -13,15 +13,15 @@ std::ostream& operator<<(std::ostream& os, const super_block_t sb)
         << "Blocks free: " << sb.blocks_free << endl
         << "Block size (in sectors): " << sb.block_size << endl
         << endl
-        << "Inode map first sector: " << sb.inodemap_first_sector << endl
+        << "Inode map first sector: " << sb.inodemap_first_block << endl
         << "Inode map size (in blocks): " << sb.inodemap_size << endl
         << endl
-        << "Inodes first sector: " << sb.inode_first_sector << endl
+        << "Inodes first sector: " << sb.inode_first_block << endl
         << "Inodes size (in blocks): " << sb.inodes_size << endl
         << endl 
-        << "Space map first sector: " << sb.spacemap_first_sector << endl
+        << "Space map first sector: " << sb.spacemap_first_block << endl
         << "Space map size (in blocks): " << sb.spacemap_size << endl
         << endl
-        << "Data first sector: " << sb.data_first_sector << endl
+        << "Data first sector: " << sb.data_first_block << endl
         << "Magic: " << sb.magic << endl;
 }

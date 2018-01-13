@@ -16,27 +16,33 @@ directory::directory(const std::string& new_dir_name, file_system* fs)
 {
 	auto ret = fs->mkdir(new_dir_name);
 	if (ret < 0)
-		throw std::exception("bad filename");
+		throw std::exception();
 
 	file_ = new file(new_dir_name, fs);
 }
 
 directory& directory::operator=(directory&& that) noexcept
 {
+	if (this == &that) return *this;
+
 	delete file_;
 	file_ = that.file_;
 	that.file_ = nullptr;
 	return *this;
 }
 
-directory::directory(const directory & that) : file_(new file(that.file_->inode_n_, that.file_->fs_))
+directory::directory(const directory & that)
 {
+	if (that.file_ == nullptr)
+		file_ = nullptr;
+	else
+		file_ = new file(that.file_->inode_n_, that.file_->fs_);
 }
 
 directory::directory(uint32_t inode_n, file_system * fs) : file_(new file(inode_n, fs))
 {
     if (file_->inode_.f_type != file_type::dir)
-        throw std::exception("Not a directory");
+        throw std::exception();
 }
 
 directory::directory(file & dir_file) : file_(&dir_file)
@@ -47,7 +53,7 @@ void directory::reopen(uint32_t inode_n, file_system * fs)
 {
     file_->reopen(inode_n, fs);
     if (file_->inode_.f_type != file_type::dir)
-        throw std::exception("Not a directory");
+        throw std::exception();
 }
 
 dirent_t directory::find(const std::string & filename)
@@ -66,9 +72,9 @@ dirent_t directory::find(const std::string & filename)
             file_->seek(prev_pos);
             return dirent;
         }
-    } while (dirent.inode_n != INODE_INVALID);
+    } while (dirent.inode_n != INVALID_INODE);
     
-    dirent.inode_n = INODE_INVALID;
+    dirent.inode_n = INVALID_INODE;
     dirent.name[0] = '\0';
 
     file_->seek(prev_pos);
@@ -81,9 +87,9 @@ dirent_t directory::read()
     auto ret = file_->read(reinterpret_cast<char *>(&dirent), sizeof(dirent_t));
 
 	if (ret < 0)
-		return DIRENT_INVALID;
+		return INVALID_DIRENT;
     
-    if (dirent.inode_n == INODE_INVALID)
+    if (dirent.inode_n == INVALID_INODE)
         file_->seek(file_->get_curr_pos() - sizeof(dirent_t));
     return dirent;
 }
@@ -107,7 +113,7 @@ int directory::add_entry(uint32_t inode_n, const std::string & filename)
 {
     dirent_t dirent = find(filename);
 
-    if (dirent.inode_n != INODE_INVALID)
+    if (dirent.inode_n != INVALID_INODE)
         return EDIR_FILE_EXISTS;
 
     file tmp = file(inode_n, file_->fs_);
@@ -121,7 +127,7 @@ int directory::add_entry(uint32_t inode_n, const std::string & filename)
 
     do {
         ret = file_->read(reinterpret_cast<char *>(&dirent), sizeof(dirent_t));
-    } while (dirent.inode_n != INODE_INVALID && ret >= 0);
+    } while (dirent.inode_n != INVALID_INODE && ret >= 0);
 
 	dirent.inode_n = inode_n;
 	dirent.f_type = inode.f_type;
@@ -132,12 +138,16 @@ int directory::add_entry(uint32_t inode_n, const std::string & filename)
 	else
 		file_->seek(0);
 
-    file_->write(reinterpret_cast<char *>(&dirent), sizeof(dirent_t));
+    ret = file_->write(reinterpret_cast<char *>(&dirent), sizeof(dirent_t));
+	if (ret < 0)
+		return ret;
     
-    dirent.inode_n = INODE_INVALID;
+    dirent.inode_n = INVALID_INODE;
     dirent.name[0] = '\0';
 
-    file_->write(reinterpret_cast<char *>(&dirent), sizeof(dirent_t));
+    ret = file_->write(reinterpret_cast<char *>(&dirent), sizeof(dirent_t));
+	if (ret < 0)
+		return ret;
 
     file_->seek(prev_pos);
 
@@ -158,16 +168,16 @@ int directory::remove_entry(const std::string & filename)
         auto curr_filename = std::string(dirent.name);
         if (curr_filename == filename)
             break;
-    } while (dirent.inode_n != INODE_INVALID);
+    } while (dirent.inode_n != INVALID_INODE);
 
-    if (dirent.inode_n == INODE_INVALID)
+    if (dirent.inode_n == INVALID_INODE)
         return EDIR_FILE_NOT_FOUND;
 
     deleted_pos = file_->get_curr_pos() - sizeof(dirent_t);
 
     do {
         file_->read(reinterpret_cast<char *>(&dirent), sizeof(dirent_t));
-    } while (dirent.inode_n != INODE_INVALID);
+    } while (dirent.inode_n != INVALID_INODE);
     end_pos = file_->get_curr_pos() - sizeof(dirent_t);
 
     char * buffer = new char[end_pos - deleted_pos];

@@ -4,7 +4,7 @@ SOURCE_EXT = .cpp
 CC = g++
 # used to make individual rules
 CPP = cpp
-CFLAGS = -g -Werror -Wall -Wextra -x c++
+CFLAGS = -g -Werror -Wall -Wextra -std=c++11 -x c++
 LDFLAGS = 
 
 # dirs for source and object files

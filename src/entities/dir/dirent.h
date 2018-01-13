@@ -3,6 +3,8 @@
 
 #define DIRENT_NAME_MAX (32)
 
+#include <iostream>
+
 #include "../../inode/inode.h"
 
 typedef struct dirent_struct
@@ -14,9 +16,9 @@ typedef struct dirent_struct
 
 inline std::ostream& operator<<(std::ostream& os, dirent_struct d)
 {
-	return os << d.inode_n << ":" << static_cast<uint8_t>(d.f_type) << ":" << d.name;
+	return os << static_cast<unsigned long>(d.inode_n) << ":" << static_cast<uint8_t>(d.f_type) << ":" << d.name;
 }
 
-#define DIRENT_INVALID (dirent_t{INODE_INVALID, file_type::other, ""})
+#define INVALID_DIRENT (dirent_t{INVALID_INODE, file_type::other, ""})
 
 #endif

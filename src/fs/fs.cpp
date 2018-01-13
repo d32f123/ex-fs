@@ -1,8 +1,11 @@
 #include "fs.h"
 
+#include <iostream>
 #include <vector>
 #include <ctime>
 #include <cstring>
+#include <limits>
+#include <tuple>
 
 #include "../inode/inode.h"
 #include "../spacemap/spacemap.h"
@@ -50,15 +53,17 @@ int file_system::load(const std::string & disk_file)
         return ret;
 
 	// init data buffer
-	this->data_buffer_ = new char[super_block_.block_size * SECTOR_SIZE];
+	this->data_buffer_ = new char[DATABUFFER_SIZE * super_block_.block_size * SECTOR_SIZE];
 
     // init inode map
 	this->inode_map_ = new space_map(super_block_.inodes_count);
-	read_object(super_block_.inodemap_first_sector, 0, inode_map_->get_bytes_count(), inode_map_->bits_arr);
+	read_object(super_block_.inodemap_first_block, 0, inode_map_->get_bytes_count(), inode_map_->bits_arr);
 
 	// init space map
 	this->space_map_ = new space_map(super_block_.blocks_count);
-	read_object(super_block_.spacemap_first_sector, 0, space_map_->get_bytes_count(), space_map_->bits_arr);
+	read_object(super_block_.spacemap_first_block, 0, space_map_->get_bytes_count(), space_map_->bits_arr);
+
+	std::cout << super_block_;
 
 	// init cwd
 	cwd_ = directory(INODE_ROOT_ID, this);
@@ -68,6 +73,10 @@ int file_system::load(const std::string & disk_file)
 
 void file_system::unload()
 {
+	sync();
+
+	cache_.clear();
+
     delete[] data_buffer_;
 	data_buffer_ = nullptr;
 
@@ -80,14 +89,195 @@ void file_system::unload()
     this->disk_.unload();
 }
 
+int file_system::sync()
+{
+	int ret;
+	if (sb_dirty_)
+	{
+		ret = this->disk_.write_block(SUPERBLOCK_SECT, reinterpret_cast<char *>(&super_block_), 1);
+		if (ret < 0)
+			return ret;
+		sb_dirty_ = false;
+	}
+	if (im_dirty_)
+	{
+		ret = write_object(super_block_.inodemap_first_block, 0, inode_map_->get_bytes_count(), inode_map_->bits_arr);
+		if (ret < 0)
+			return ret;
+		im_dirty_ = false;
+	}
+	if (sm_dirty_)
+	{
+		ret = write_object(super_block_.spacemap_first_block, 0, space_map_->get_bytes_count(), space_map_->bits_arr);
+		if (ret < 0)
+			return ret;
+		sm_dirty_ = false;
+	}
+	return 0;
+}
+
+void file_system::trace()
+{
+	using std::cout;
+	using std::endl;
+	for (uint32_t i = 0; i < inode_map_->get_bits_count(); ++i)
+	{
+		const auto occupied = inode_map_->get(i);
+		cout << "Inode " << i << ": " << (!occupied ? "free" : "occupied") << endl;
+		if (occupied)
+		{
+			inode_t ind;
+			read_inode(i, &ind);
+			cout << ind;
+		}
+		cout << endl << "-------------------------" << endl;
+	}
+	cout << "Inode map:\n";
+	cout << *inode_map_ << endl;
+	cout << "Space map:\n";
+	cout << *space_map_ << endl;
+	cout << std::dec;
+}
+
+void file_system::traceblock(uint32_t block)
+{
+	using std::cout;
+	using std::setw;
+	using std::setfill;
+	using std::endl;
+	using std::dec;
+
+	read_data_block(block, data_buffer_, 1);
+	// DATABUFFER_SIZE * super_block_.block_size * SECTOR_SIZE
+	for (uint32_t i = 0; i < 64; ++i)
+	{
+		if (i % 16 == 0)
+			cout << endl << setw(4) << setfill('0') << std::hex << static_cast<int>(i << 4) << dec << ": ";
+		cout << hex(data_buffer_[i]);
+	}
+	cout << std::dec;
+	cout << endl;
+}
+
+file_system::file_system(const file_system& that) : super_block_(that.super_block_)
+{
+	disk_ = that.disk_;
+	
+	sb_dirty_ = that.sb_dirty_;
+	im_dirty_ = that.im_dirty_;
+	sm_dirty_ = that.sm_dirty_;
+
+	cache_ = that.cache_;
+
+	files_ = that.files_;
+	dirs_ = that.dirs_;
+
+	cwd_ = that.cwd_;
+
+	data_buffer_ = new char[DATABUFFER_SIZE * super_block_.block_size * SECTOR_SIZE];
+	memcpy(data_buffer_, that.data_buffer_, DATABUFFER_SIZE * super_block_.block_size * SECTOR_SIZE);
+
+	inode_map_ = new space_map(*that.inode_map_);
+	space_map_ = new space_map(*that.space_map_);
+}
+
+file_system::file_system(file_system&& that) noexcept : super_block_(that.super_block_)
+{
+	disk_ = std::move(that.disk_);
+
+	sb_dirty_ = that.sb_dirty_;
+	that.sb_dirty_ = false;
+	im_dirty_ = that.im_dirty_;
+	that.im_dirty_ = false;
+	sm_dirty_ = that.sm_dirty_;
+	that.sm_dirty_ = false;
+
+	cache_ = std::move(that.cache_);
+
+	files_ = std::move(that.files_);
+	dirs_ = std::move(that.dirs_);
+
+	cwd_ = std::move(that.cwd_);
+
+	data_buffer_ = that.data_buffer_;
+	that.data_buffer_ = nullptr;
+
+	inode_map_ = that.inode_map_;
+	that.inode_map_ = nullptr;
+	space_map_ = that.space_map_;
+	that.space_map_ = nullptr;
+}
+
+file_system::~file_system()
+{
+	sync();
+	delete[] data_buffer_;
+}
+
+file_system& file_system::operator=(const file_system& that)
+{
+	if (this == &that) return *this;
+
+	disk_ = that.disk_;
+
+	sb_dirty_ = that.sb_dirty_;
+	im_dirty_ = that.im_dirty_;
+	sm_dirty_ = that.sm_dirty_;
+
+	cache_ = that.cache_;
+
+	files_ = that.files_;
+	dirs_ = that.dirs_;
+
+	cwd_ = that.cwd_;
+
+	data_buffer_ = new char[DATABUFFER_SIZE * super_block_.block_size * SECTOR_SIZE];
+	memcpy(data_buffer_, that.data_buffer_, DATABUFFER_SIZE * super_block_.block_size * SECTOR_SIZE);
+
+	inode_map_ = new space_map(*that.inode_map_);
+	space_map_ = new space_map(*that.space_map_);
+
+	return *this;
+}
+
+file_system& file_system::operator=(file_system&& that) noexcept
+{
+	if (this == &that) return *this;
+
+	disk_ = std::move(that.disk_);
+
+	sb_dirty_ = that.sb_dirty_;
+	that.sb_dirty_ = false;
+	im_dirty_ = that.im_dirty_;
+	that.im_dirty_ = false;
+	sm_dirty_ = that.sm_dirty_;
+	that.sm_dirty_ = false;
+
+	cache_ = std::move(that.cache_);
+
+	files_ = std::move(that.files_);
+	dirs_ = std::move(that.dirs_);
+
+	cwd_ = std::move(that.cwd_);
+
+	data_buffer_ = that.data_buffer_;
+	that.data_buffer_ = nullptr;
+
+	inode_map_ = that.inode_map_;
+	that.inode_map_ = nullptr;
+	space_map_ = that.space_map_;
+	that.space_map_ = nullptr;
+
+	return *this;
+}
+
 int file_system::init(const std::string & disk_file, const uint32_t inodes_count, 
     std::size_t disk_size, const uint32_t block_size)
 {
     if (this->disk_.is_open())
         this->unload();
-    
-    int ret;
-    ret = this->disk_.create(disk_file, disk_size);
+
+	auto ret = this->disk_.create(disk_file, disk_size);
     if (ret < 0)
         return ret;
 
@@ -96,13 +286,13 @@ int file_system::init(const std::string & disk_file, const uint32_t inodes_count
     //                      -1 sector for superblock
     //                      - sectors required for inode map
     //                      - sectors required for inodes
-    uint32_t inodes_size = bytes_to_blocks(sizeof(inode_t) * inodes_count, block_size);
+    const auto inodes_size = bytes_to_blocks(sizeof(inode_t) * inodes_count, block_size);
 
-    uint32_t inodemap_size = bits_to_blocks(inodes_count, block_size);
+    const auto inodemap_size = bits_to_blocks(inodes_count, block_size);
 
-    uint32_t blocks_count = (disk_size - 1 - (inodes_size * block_size) -(inodemap_size * block_size)) / block_size;
+    const auto blocks_count = (disk_size - 1 - (inodes_size * block_size) -(inodemap_size * block_size)) / block_size;
 
-    uint32_t spacemap_size = bits_to_blocks(blocks_count, block_size);
+    const auto spacemap_size = bits_to_blocks(blocks_count, block_size);
 
 	super_block_t sb;
 	sb.inodes_count = inodes_count;
@@ -111,20 +301,24 @@ int file_system::init(const std::string & disk_file, const uint32_t inodes_count
 	sb.blocks_count = blocks_count;
 	sb.blocks_free = blocks_count;
 	sb.block_size = block_size;
-    sb.inodemap_first_sector = 1;
+	sb.block_offset = 1;
+    sb.inodemap_first_block = 0;
     sb.inodemap_size = inodemap_size;
-	sb.inode_first_sector = inodemap_size * block_size + 1; // TODO: CHANGE
-	sb.spacemap_first_sector = sb.inode_first_sector + inodes_size * block_size;
-	sb.data_first_sector = sb.spacemap_first_sector;
+	sb.inode_first_block = inodemap_size;
+	sb.spacemap_first_block = sb.inode_first_block + inodes_size;
+	sb.data_first_block = sb.spacemap_first_block;
 	sb.inodes_size = inodes_size;
 	sb.spacemap_size = spacemap_size;
 	sb.magic = 0xBEEF;
 
     this->super_block_ = sb;
+
+	std::cout << super_block_;
+
     this->disk_.write_block(0, reinterpret_cast<char *>(&this->super_block_), 1);
 
 	// init data buffer
-    this->data_buffer_ = new char[super_block_.block_size * SECTOR_SIZE];
+    this->data_buffer_ = new char[DATABUFFER_SIZE * super_block_.block_size * SECTOR_SIZE];
 
     // creating inode map
 
@@ -132,7 +326,7 @@ int file_system::init(const std::string & disk_file, const uint32_t inodes_count
 
     inode_map_->set(true, INODE_ROOT_ID);
 
-    this->write_object(sb.inodemap_first_sector, 0, inode_map_->get_bytes_count(), inode_map_->bits_arr);
+    this->write_object(sb.inodemap_first_block, 0, inode_map_->get_bytes_count(), inode_map_->bits_arr);
 
     // create root inode
     const auto curr_time = time(nullptr);
@@ -153,7 +347,7 @@ int file_system::init(const std::string & disk_file, const uint32_t inodes_count
 	for (uint32_t i = 0; i < spacemap_size; ++i)
 		this->space_map_->set(true, i);
 
-	this->write_object(super_block_.spacemap_first_sector, 0, space_map_->get_bytes_count(), space_map_->bits_arr);
+	this->write_object(sb.spacemap_first_block, 0, space_map_->get_bytes_count(), space_map_->bits_arr);
 
 	// init cwd
 	cwd_ = directory(INODE_ROOT_ID, this);
@@ -190,8 +384,8 @@ int file_system::link(const std::string & original_file, const std::string & new
     directory dir = directory(last_dir_inode, this);
 
     // check if file exists
-    auto dirent = dir.find(small_name);
-    if (dirent.inode_n != INODE_INVALID)
+    const auto dirent = dir.find(small_name);
+    if (dirent.inode_n != INVALID_INODE)
     {
         return EDIR_FILE_EXISTS;
     }
@@ -202,7 +396,7 @@ int file_system::link(const std::string & original_file, const std::string & new
     if (ret < 0)
         return ret;
 
-    auto curr_time = time(NULL);
+    const auto curr_time = time(nullptr);
     orig_file.access_time = curr_time;
     orig_file.change_time = curr_time;
     ++orig_file.links_count;
@@ -218,62 +412,7 @@ int file_system::link(const std::string & original_file, const std::string & new
 
 int file_system::unlink(const std::string & file_name)
 {
-    if (file_name.empty())
-        return EDIR_INVALID_PATH;
-    
-    uint32_t file_inode;
-    uint32_t last_dir_inode;
-	auto vec = get_dir_and_file(file_name);
-	const auto dir_path = vec[0];
-	const auto small_name = vec[1];
-    // get dir inode
-    auto ret = get_inode_by_path(dir_path, &last_dir_inode);
-    if (ret < 0)
-        return ret;
-    // get file inode
-    ret = get_inode_by_path(file_name, &file_inode);
-    if (ret < 0)
-        return ret;
-
-    directory dir = directory(last_dir_inode, this);
-    
-    // get the counter down
-    inode_t inode;
-    ret = read_inode(file_inode, &inode);
-    if (ret < 0)
-        return ret;
-
-	if (inode.f_type == file_type::dir)
-		return EFIL_WRONG_TYPE;
-
-    auto curr_time = time(NULL);
-    inode.access_time = curr_time;
-    inode.change_time = curr_time;
-    --inode.links_count;
-
-    // check if links count is 0 (or somehow less than 0)
-    if (inode.links_count > super_block_.inodes_count)
-    {
-        std::cerr << "inode " << file_inode << " has link count: " << inode.links_count << std::endl;
-    }
-    if (inode.links_count == 0)
-    {
-        // clear the space
-        file tmp = file(file_inode, this);
-        tmp.trunc(0);
-        // clear the inode
-        inode_map_->set(false, file_inode);
-    }
-    else
-    {
-        ret = write_inode(file_inode, &inode);
-        if (ret < 0)
-            return ret;
-    }
-    // remove file from directory
-    dir.remove_entry(small_name);
-
-    return 0;
+	return do_unlink(file_name, false);
 }
 
 fid_t file_system::open(const std::string & disk_file)
@@ -288,7 +427,7 @@ fid_t file_system::open(const std::string & disk_file)
 	return fid;
 }
 
-int file_system::close(fid_t fid)
+int file_system::close(fid_t fid) const
 {
 	try
 	{
@@ -367,12 +506,22 @@ int file_system::mkdir(const std::string & dir_name)
 {
 	uint32_t prev_dir_inode;
 	uint32_t inode_out;
-	const auto ret = do_create(dir_name, file_type::dir, &inode_out, &prev_dir_inode);
+	auto ret = do_create(dir_name, file_type::dir, &inode_out, &prev_dir_inode);
 	if (ret < 0)
 		return ret;
 	auto dir = directory(inode_out, this);
-	dir.add_entry(inode_out, ".");
-	dir.add_entry(prev_dir_inode, "..");
+	ret = dir.add_entry(inode_out, ".");
+	if (ret < 0)
+	{
+		do_unlink(dir_name, true);
+		return ret;
+	}
+	ret = dir.add_entry(prev_dir_inode, "..");
+	if (ret < 0)
+	{
+		do_unlink(dir_name, true);
+		return ret;
+	}
 	return 0;
 }
 
@@ -391,14 +540,16 @@ int file_system::rmdir(const std::string & dir_name)
 
     // check if dir is empty or not
 	auto dir = directory(dir_inode, this);
-	const auto dirent = dir.read();
-    if (dirent.inode_n != INODE_INVALID)
+	dir.read(); // . dir
+	dir.read(); // .. dir
+	const auto dirent = dir.read(); // should be invalid 
+    if (dirent.inode_n != INVALID_INODE)
     {
         return EDIR_NOT_EMPTY;
     }
 
     // todo: notify dirs that are opened that they are actually deleted
-    return unlink(dir_name);
+    return do_unlink(dir_name, true);
 }
 
 did_t file_system::opendir(const std::string & dir_name)
@@ -413,7 +564,7 @@ did_t file_system::opendir(const std::string & dir_name)
 	return index;
 }
 
-int file_system::closedir(did_t dir_id)
+int file_system::closedir(did_t dir_id) const
 {
 	try
 	{
@@ -434,7 +585,7 @@ dirent_t file_system::readdir(did_t dir_id)
 	}
 	catch (std::exception &)
 	{
-		return DIRENT_INVALID;
+		return INVALID_DIRENT;
 	}
 }
 
@@ -490,9 +641,9 @@ int file_system::get_inode_by_path(const std::string & path, uint32_t * inode_ou
     {
 	    const auto dirent = curr_dir.find(tokens[i]);
         // if a dir does not exist
-        if (dirent.inode_n == INODE_INVALID)
+        if (dirent.inode_n == INVALID_INODE)
         {
-            (*inode_out) = INODE_INVALID;
+            (*inode_out) = INVALID_INODE;
             return EDIR_INVALID_PATH;
         }
         // check if a file is not a dir
@@ -502,7 +653,7 @@ int file_system::get_inode_by_path(const std::string & path, uint32_t * inode_ou
         }
         catch (std::string &)
         {
-            (*inode_out) = INODE_INVALID;
+            (*inode_out) = INVALID_INODE;
             return EDIR_NOT_A_DIR;
         }
     }
@@ -510,9 +661,9 @@ int file_system::get_inode_by_path(const std::string & path, uint32_t * inode_ou
 	if (tokens[tokens.size() - 1].length() != 0)
 	{
 		const auto ret = curr_dir.find(tokens[tokens.size() - 1]);
-		if (ret.inode_n == INODE_INVALID)
+		if (ret.inode_n == INVALID_INODE)
 		{
-			(*inode_out) = INODE_INVALID;
+			(*inode_out) = INVALID_INODE;
 			return EDIR_FILE_NOT_FOUND;
 		}
 
@@ -521,6 +672,66 @@ int file_system::get_inode_by_path(const std::string & path, uint32_t * inode_ou
 	else
 		(*inode_out) = curr_dir.get_file()->get_inode_n();
     return 0;
+}
+
+int file_system::do_unlink(const std::string& file_name, bool force)
+{
+	if (file_name.empty())
+		return EDIR_INVALID_PATH;
+
+	uint32_t file_inode;
+	uint32_t last_dir_inode;
+	auto vec = get_dir_and_file(file_name);
+	const auto dir_path = vec[0];
+	const auto small_name = vec[1];
+	// get dir inode
+	auto ret = get_inode_by_path(dir_path, &last_dir_inode);
+	if (ret < 0)
+		return ret;
+	// get file inode
+	ret = get_inode_by_path(file_name, &file_inode);
+	if (ret < 0)
+		return ret;
+
+	directory dir = directory(last_dir_inode, this);
+
+	// get the counter down
+	inode_t inode;
+	ret = read_inode(file_inode, &inode);
+	if (ret < 0)
+		return ret;
+
+	if (!force && inode.f_type == file_type::dir)
+		return EFIL_WRONG_TYPE;
+
+	const auto curr_time = time(nullptr);
+	inode.access_time = curr_time;
+	inode.change_time = curr_time;
+	--inode.links_count;
+
+	// check if links count is 0 (or somehow less than 0)
+	if (inode.links_count == 0)
+	{
+		if (inode.links_count > super_block_.inodes_count)
+		{
+			std::cerr << "inode " << file_inode << " has link count: " << inode.links_count << std::endl;
+		}
+		// clear the space
+		file tmp = file(file_inode, this);
+		tmp.trunc(0);
+		// clear the inode
+		set_inode_status(file_inode, false);
+	}
+	else
+	{
+		ret = write_inode(file_inode, &inode);
+		if (ret < 0)
+			return ret;
+	}
+	// remove file from directory
+	dir.remove_entry(small_name);
+
+	return 0;
 }
 
 int file_system::do_create(const std::string& file_name, file_type f_type, 
@@ -546,14 +757,14 @@ int file_system::do_create(const std::string& file_name, file_type f_type,
 	}
 
 	// check if file exists
-	auto dirent = dir.find(small_name);
-	if (dirent.inode_n != INODE_INVALID)
+	const auto dirent = dir.find(small_name);
+	if (dirent.inode_n != INVALID_INODE)
 	{
 		return EDIR_FILE_EXISTS;
 	}
 
-	uint32_t inode_num = get_free_inode();
-	if (inode_num == INODE_INVALID)
+	const auto inode_num = get_free_inode();
+	if (inode_num == INVALID_INODE)
 		return EIND_OUT_OF_INODES;
 	auto inode = get_new_inode(f_type, 0755);
 
@@ -562,7 +773,7 @@ int file_system::do_create(const std::string& file_name, file_type f_type,
 	if (ret < 0)
 		return ret;
 
-	inode_map_->set(true, inode_num);
+	set_inode_status(inode_num, true);
 	dir.add_entry(inode_num, small_name);
 
 	if (inode_out != nullptr)
@@ -574,39 +785,132 @@ int file_system::do_create(const std::string& file_name, file_type f_type,
 }
 
 
-int file_system::read_block(uint32_t start_sector, char * buffer, std::size_t size)
+/**
+ * \brief reads a block of storage into memory
+ * \param start_block starting block
+ * \param buffer buffer to read info into
+ * \param size size in blocks
+ * \return error code
+ */
+int file_system::read_block(uint32_t start_block, char * buffer, const std::size_t size)
 {
-    // TODO: CACHING
-    return disk_.read_block(start_sector, buffer, size);
+	const auto block_bytes = super_block_.block_size * SECTOR_SIZE;
+	std::tuple<uint32_t, std::size_t> curr_read;
+	int ret;
+
+	//std::cout << "r:" << start_block << ":" << size << std::endl;
+
+	// check through all the blocks and see if any of those are in cache
+	auto prev_push = static_cast<std::size_t>(-1);
+	for (std::size_t i = 0; i < size; ++i)
+	{
+		const auto offset = i * block_bytes;
+		if (cache_.contains(start_block + i))
+		{
+			// check if we need to read from mem
+			if (prev_push != static_cast<std::size_t>(-1))
+			{
+				const auto b_start = std::get<0>(curr_read);
+				const auto b_size = std::get<1>(curr_read);
+
+				const auto sector = super_block_.block_offset + b_start * super_block_.block_size;
+				const auto mem_offset = (b_start - start_block) * block_bytes;
+
+				ret = disk_.read_block(sector, buffer + mem_offset, b_size);
+				if (ret < 0)
+					return ret;
+				// place it in cache
+				for (std::size_t j = 0; j < b_size; ++j)
+				{
+					auto vec = std::vector<char>(block_bytes);
+					memcpy(vec.data(), buffer + (b_start - start_block + j) * block_bytes, block_bytes);
+					cache_.insert(b_start + j, vec);
+				}
+
+				prev_push = static_cast<std::size_t>(-1);
+			}
+			// if in cache, just copy it straight inwards
+			memcpy(buffer + offset, cache_.get(start_block + i).data(), block_bytes);
+		}
+		else
+		{
+			if (i != 0 && i == prev_push + 1)
+				std::get<1>(curr_read)++;
+			else
+				curr_read = std::make_tuple(start_block + i, 1);
+			prev_push = i;
+		}
+	}
+
+
+	// check if we need to read from mem
+	if (prev_push != static_cast<std::size_t>(-1))
+	{
+		const auto b_start = std::get<0>(curr_read);
+		const auto b_size = std::get<1>(curr_read);
+
+		const auto sector = super_block_.block_offset + b_start * super_block_.block_size;
+		const auto mem_offset = (b_start - start_block) * block_bytes;
+
+		ret = disk_.read_block(sector, buffer + mem_offset, b_size * super_block_.block_size);
+		if (ret < 0)
+			return ret;
+		// place it in cache
+		for (std::size_t j = 0; j < b_size; ++j)
+		{
+			auto vec = std::vector<char>(block_bytes);
+			memcpy(vec.data(), buffer + (b_start - start_block + j) * block_bytes, block_bytes);
+			cache_.insert(b_start + j, vec);
+		}
+	}
+	
+	disk_.read_block(super_block_.block_offset + start_block * super_block_.block_size, buffer, size * super_block_.block_size);
+	return size * block_bytes;
 }
 
-int file_system::write_block(uint32_t start_sector, const char * buffer, std::size_t size)
+/**
+* \brief writes a block of memopry into storage
+* \param start_block starting block
+* \param buffer buffer to write info from
+* \param size size in blocks
+* \return error code
+*/
+int file_system::write_block(uint32_t start_block, const char * buffer, std::size_t size)
 {
-    // TODO: CACHING
-    return disk_.write_block(start_sector, buffer, size);
+	const auto block_bytes = super_block_.block_size * SECTOR_SIZE;
+
+	//std::cout << "w:" << start_block << ":" << size << std::endl;
+
+	for (std::size_t i = 0; i < size; ++i)
+	{
+		auto vec = std::vector<char>(block_bytes);
+		memcpy(vec.data(), buffer + i * block_bytes, block_bytes);
+		cache_.insert(start_block + i, vec);
+	}
+
+    return disk_.write_block(super_block_.block_offset + start_block * super_block_.block_size, 
+		buffer, size * super_block_.block_size);
 }
 
 int file_system::read_data_block(uint32_t start_block, char* buffer, std::size_t size)
 {
-	return read_block(super_block_.data_first_sector + super_block_.block_size * start_block,
-		buffer, size);
+	return read_block(super_block_.data_first_block + start_block, buffer, size);
 }
 
 int file_system::write_data_block(uint32_t start_block, const char* buffer, std::size_t size)
 {
-	return write_block(super_block_.data_first_sector + super_block_.block_size * start_block,
-		buffer, size);
+	return write_block(super_block_.data_first_block + start_block, buffer, size);
 }
 
-int file_system::read_object(uint32_t start_sector, std::size_t offset, std::size_t obj_size, void * buffer)
+int file_system::read_object(uint32_t start_block, std::size_t offset, std::size_t obj_size, void * buffer)
 {
-    auto curr_sector = start_sector;
+    auto curr_block = start_block;
     const auto block_size_bytes = super_block_.block_size * SECTOR_SIZE;
     int ret;
     
-    if (offset + obj_size <= block_size_bytes)
+    if (offset + obj_size <= (block_size_bytes * DATABUFFER_SIZE))
     {
-        ret = read_block(curr_sector, data_buffer_, super_block_.block_size);
+        ret = read_block(curr_block, data_buffer_, DATABUFFER_SIZE);
         if (ret < 0)
             return ret;
         memcpy(buffer, data_buffer_ + offset, obj_size);
@@ -616,82 +920,88 @@ int file_system::read_object(uint32_t start_sector, std::size_t offset, std::siz
     std::size_t obj_pos = 0;
 	while (obj_pos < obj_size)
     {
-        ret = read_block(curr_sector, data_buffer_, super_block_.block_size);
+        ret = read_block(curr_block, data_buffer_, DATABUFFER_SIZE);
         if (ret < 0)
             return ret;
 
-	    const auto copy_size = ((obj_size - obj_pos < block_size_bytes - offset) ? obj_size - obj_pos : block_size_bytes - offset); 
+	    const auto copy_size = ((obj_size - obj_pos < block_size_bytes * DATABUFFER_SIZE - offset) 
+									? obj_size - obj_pos 
+									: block_size_bytes * DATABUFFER_SIZE - offset);
         memcpy(reinterpret_cast<char *>(buffer) + obj_pos, data_buffer_ + offset, copy_size);
         obj_pos += copy_size;
         offset = 0;
-        curr_sector += super_block_.block_size;
+        curr_block += DATABUFFER_SIZE;
     }
     return 0;
 }
 
-int file_system::write_object(const uint32_t start_sector, std::size_t offset, const std::size_t obj_size, const void * buffer)
+int file_system::write_object(const uint32_t start_block, std::size_t offset, const std::size_t obj_size, const void * buffer)
 {
-	auto curr_sector = start_sector;
+	auto curr_block = start_block;
 	const auto block_size_bytes = super_block_.block_size * SECTOR_SIZE;
     int ret;
     
-    if (offset + obj_size <= block_size_bytes)
+    if (offset + obj_size <= block_size_bytes * DATABUFFER_SIZE)
     {
-        ret = read_block(curr_sector, data_buffer_, super_block_.block_size);
+        ret = read_block(curr_block, data_buffer_, DATABUFFER_SIZE);
         if (ret < 0)
             return ret;
         memcpy(data_buffer_ + offset, buffer, obj_size);
-        write_block(curr_sector, data_buffer_, super_block_.block_size);
+        write_block(curr_block, data_buffer_, DATABUFFER_SIZE);
 		return obj_size;
     }
 
     std::size_t obj_pos = 0;
 	while (obj_pos < obj_size)
     {
-	    const auto copy_size = ((obj_size - obj_pos < block_size_bytes - offset)
+	    const auto copy_size = ((obj_size - obj_pos < block_size_bytes * DATABUFFER_SIZE - offset)
 		                                   ? obj_size - obj_pos
-		                                   : block_size_bytes - offset); 
+		                                   : block_size_bytes * DATABUFFER_SIZE - offset);
 
-        if (copy_size == block_size_bytes)
+		// if copy size is adjacent with block size, we dont have to read anything
+        if ((copy_size % (block_size_bytes * DATABUFFER_SIZE)) == 0)
         {
-            ret = write_block(curr_sector, reinterpret_cast<const char *>(buffer) + obj_pos, super_block_.block_size);
+            ret = write_block(curr_block, reinterpret_cast<const char *>(buffer) + obj_pos, copy_size / block_size_bytes);
 
             if (ret < 0)
                 return ret;
 
             obj_pos += copy_size;
-            curr_sector += super_block_.block_size;
+            curr_block += copy_size / block_size_bytes;
             continue;
         }
 
-        ret = read_block(curr_sector, data_buffer_, super_block_.block_size);
+        ret = read_block(curr_block, data_buffer_, DATABUFFER_SIZE);
         if (ret < 0)
             return ret;
         
         memcpy(data_buffer_ + offset, reinterpret_cast<const char *>(buffer) + obj_pos, copy_size);
+
+		ret = write_block(curr_block, data_buffer_, DATABUFFER_SIZE);
+		if (ret < 0)
+			return ret;
+
         obj_pos += copy_size;
         offset = 0;
-        curr_sector += super_block_.block_size;
+        curr_block += DATABUFFER_SIZE;
     }
     return obj_size;
 }
 
 int file_system::read_data_object(uint32_t start_block, std::size_t offset, std::size_t obj_size, void* buffer)
 {
-	return read_object(super_block_.data_first_sector + start_block * super_block_.block_size, 
-		offset, obj_size, buffer);
+	return read_object(super_block_.data_first_block + start_block, offset, obj_size, buffer);
 }
 
 int file_system::write_data_object(uint32_t start_block, std::size_t offset, std::size_t obj_size, const void* buffer)
 {
-	return write_object(super_block_.data_first_sector + start_block * super_block_.block_size,
-		offset, obj_size, buffer);
+	return write_object(super_block_.data_first_block + start_block, offset, obj_size, buffer);
 }
 
 int file_system::write_inode(uint32_t inode_id, const inode_t * inode)
 {
-    const auto sector = super_block_.inode_first_sector + (inode_id * sizeof(inode_t) / SECTOR_SIZE);
-    return write_object(sector, (inode_id * sizeof(inode_t)) % SECTOR_SIZE, sizeof(inode_t), inode);
+    const auto block = super_block_.inode_first_block + inode_id * sizeof(inode_t) / (super_block_.block_size * SECTOR_SIZE);
+    return write_object(block, (inode_id * sizeof(inode_t)) % (super_block_.block_size * SECTOR_SIZE), sizeof(inode_t), inode);
 }
 
 int file_system::read_inode(uint32_t inode_id, inode_t * inode)
@@ -700,13 +1010,13 @@ int file_system::read_inode(uint32_t inode_id, inode_t * inode)
     {
         return EIND_INVALID_INODE;
     }
-    const auto sector = super_block_.inode_first_sector + (inode_id * sizeof(inode_t) / SECTOR_SIZE);
-    return read_object(sector, (inode_id * sizeof(inode_t)) % SECTOR_SIZE, sizeof(inode_t), inode);
+    const auto sector = super_block_.inode_first_block + inode_id * sizeof(inode_t) / (super_block_.block_size * SECTOR_SIZE);
+    return read_object(sector, (inode_id * sizeof(inode_t)) % (super_block_.block_size * SECTOR_SIZE), sizeof(inode_t), inode);
 }
 
 inode_t file_system::get_new_inode(const file_type f_type, const uint16_t permissions)
 {
-    const auto curr_time = time(NULL);
+    const auto curr_time = time(nullptr);
 
     inode_t inode;
     inode.permissions = permissions;
@@ -723,7 +1033,7 @@ uint32_t file_system::get_free_inode() const
 {
 	const auto ret = inode_map_->find_first_of(false);
 	if (ret == std::numeric_limits<std::size_t>::max())
-		return -1;
+		return INVALID_INODE;
 	return static_cast<uint32_t>(ret);
 }
 
@@ -736,20 +1046,32 @@ uint32_t file_system::get_free_block() const
 {
 	const auto ret = space_map_->find_first_of(false);
 	if (ret == std::numeric_limits<std::size_t>::max())
-		return -1;
+		return INVALID_BLOCK;
 	return static_cast<uint32_t>(ret);
 }
 
-void file_system::set_block_status(uint32_t block_id, bool is_busy) const
+void file_system::set_block_status(uint32_t block_id, bool is_busy)
 {
-    // TODO: DIRTY FLAG
+	if (is_busy)
+		--super_block_.blocks_free;
+	else
+		++super_block_.blocks_free;
+	sb_dirty_ = true;
+
     space_map_->set(is_busy, block_id);
+	sm_dirty_ = true;
 }
 
-void file_system::set_inode_status(uint32_t inode_num, bool is_busy) const
+void file_system::set_inode_status(uint32_t inode_num, bool is_busy)
 {
-    // TODO: DIRTY FLAG
+	if (is_busy)
+		--super_block_.inodes_free;
+	else
+		++super_block_.inodes_free;
+	sb_dirty_ = true;
+
     inode_map_->set(is_busy, inode_num);
+	im_dirty_ = true;
 }
 
 std::vector<std::string> file_system::get_dir_and_file(const std::string& file_name)
@@ -757,7 +1079,7 @@ std::vector<std::string> file_system::get_dir_and_file(const std::string& file_n
 	if (file_name.empty())
 		return {"", ""};
 
-	auto last_slash = file_name.find_last_of('/');
+	const auto last_slash = file_name.find_last_of('/');
 
 	std::string dir_path;
 	std::string small_name;

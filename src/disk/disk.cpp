@@ -1,8 +1,59 @@
 #include "disk.h"
 
 #include "../errors.h"
+#include <iostream>
+#include <iomanip>
 
-int disk::create(const std::string disk_name, std::size_t size)
+disk::disk(const disk& that)
+{
+	if (that.disk_file_ && that.disk_file_->is_open())
+	{
+		load(that.filename_);
+	}
+	filename_ = that.filename_;
+}
+
+disk::disk(disk&& that) noexcept
+{
+	filename_ = that.filename_;
+	that.filename_ = {};
+
+	disk_file_ = that.disk_file_;
+	that.disk_file_ = nullptr;
+}
+
+disk& disk::operator=(const disk& that)
+{
+	if (this == &that) return *this;
+
+	if (that.disk_file_ && that.disk_file_->is_open())
+	{
+		load(that.filename_);
+	}
+	filename_ = that.filename_;
+	
+	return *this;
+}
+
+disk& disk::operator=(disk&& that) noexcept
+{
+	if (this == &that) return *this;
+
+	filename_ = that.filename_;
+	that.filename_ = {};
+
+	disk_file_ = that.disk_file_;
+	that.disk_file_ = nullptr;
+
+	return *this;
+}
+
+disk::~disk()
+{
+	this->unload();
+}
+
+int disk::create(const std::string & disk_name, std::size_t size)
 {
 	auto disk = new std::fstream;
 
@@ -60,7 +111,7 @@ int disk::unload()
     return ED_NODISK;
 }
 
-int disk::read_block(const uint32_t start_sector, char * buffer, const std::size_t size)
+int disk::read_block(const uint32_t start_sector, char * buffer, const std::size_t size) const
 {
     if (!(this->disk_file_) || !(this->disk_file_->is_open()))
         return ED_NODISK;
@@ -68,11 +119,11 @@ int disk::read_block(const uint32_t start_sector, char * buffer, const std::size
     this->disk_file_->read(buffer, size * SECTOR_SIZE);
 
     if (this->disk_file_)
-        return 0;
+        return size * SECTOR_SIZE;
     return EP_RDFIL;
 }
 
-int disk::write_block(uint32_t start_sector, const char * buffer, const std::size_t size)
+int disk::write_block(uint32_t start_sector, const char * buffer, const std::size_t size) const
 {
     if (!(this->disk_file_) || !(this->disk_file_->is_open()))
         return ED_NODISK;
@@ -80,7 +131,7 @@ int disk::write_block(uint32_t start_sector, const char * buffer, const std::siz
     this->disk_file_->write(buffer, size * SECTOR_SIZE);
 
     if (this->disk_file_)
-        return size;
+        return size * SECTOR_SIZE;
     return EP_WRFIL;
 }
 

@@ -10,20 +10,29 @@
 class disk
 {
 public:
-    disk() : disk_file_ {nullptr} { }
-	explicit disk(const std::string disk_name) : disk() { load(disk_name); }
-    disk(const std::string & disk_name, const std::size_t size) : disk() { create(disk_name, size); }
+	disk() = default;
+	explicit disk(const std::string & disk_name) { load(disk_name); }
+    disk(const std::string & disk_name, const std::size_t size) { create(disk_name, size); }
 
-    int create(const std::string disk_name, std::size_t size);
+	disk(const disk& that);
+	disk(disk&& that) noexcept;
+
+	disk& operator=(const disk& that);
+	disk& operator=(disk&& that) noexcept;
+	
+	~disk();
+
+    int create(const std::string & disk_name, std::size_t size);
     int load(const std::string & disk_name);
     int unload();
 
-    int read_block(uint32_t start_sector, char * buffer, std::size_t size);
-    int write_block(uint32_t start_sector, const char * buffer, std::size_t size);
+    int read_block(uint32_t start_sector, char * buffer, std::size_t size) const;
+    int write_block(uint32_t start_sector, const char * buffer, std::size_t size) const;
 
     bool is_open() const;
 private:
-    std::fstream * disk_file_;
+	std::string filename_{};
+    std::fstream * disk_file_{nullptr};
 };
 
 #endif

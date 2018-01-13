@@ -11,28 +11,43 @@
 #include "../entities/dir/dir.h"
 #include "../entities/dir/dirent.h"
 #include "../inode/inode.h"
-
+#include "../cache/cache.h"
 #include "../storage/storage.h"
 
-#define STORAGE_SIZE	128
+#define SUPERBLOCK_SECT	(0)
+#define STORAGE_SIZE	(128)
+#define DATABUFFER_SIZE	(1)
+#define CACHE_SIZE_DEF	(6)
 
 typedef unsigned int fid_t;
 typedef unsigned int did_t;
 
 #define INVALID_FID		(static_cast<fid_t>(-1))
 #define INVALID_DID		(static_cast<did_t>(-1))
+#define INVALID_BLOCK	(static_cast<uint32_t>(-1))
 
 class file_system
 {
 public: 
     // Default constructor
     file_system() 
-        : file_system(16) {}
-    /* TODO: CACHE */
-	explicit file_system(std::size_t)
-		: data_buffer_{nullptr}, super_block_{}, inode_map_(nullptr), space_map_(nullptr)
-	{
-	}
+        : file_system(CACHE_SIZE_DEF) {}
+	explicit file_system(std::size_t cache_size)
+		: data_buffer_{nullptr}, super_block_{}, 
+		inode_map_(nullptr), space_map_(nullptr), cache_{cache_size} {}
+
+	void trace();
+	void traceblock(uint32_t block);
+
+// RULE OF FIVE REGION --------
+	file_system(const file_system& that);
+	file_system(file_system&& that) noexcept;
+
+	~file_system();
+
+	file_system& operator=(const file_system& that);
+	file_system& operator=(file_system&& that) noexcept;
+// END RULE OF FIVE REGION ----
 
 // DISK REGION ----------------
     // Create a new disk image
@@ -43,7 +58,7 @@ public:
     // Unload current disk image
     void unload();
     // Sync changes to disk image file
-    void sync();
+    int sync();
 // END DISK REGION -------------
 
 // FILE REGION -----------------
@@ -53,7 +68,7 @@ public:
     // Open a file
     fid_t open(const std::string & disk_file);
     // Close a file
-    int close(fid_t fid);
+    int close(fid_t fid) const;
 
     int read(fid_t fid, char * buffer, std::size_t size);
     int write(fid_t fid, const char * buffer, std::size_t size);
@@ -71,7 +86,7 @@ public:
 
     // create a dir class, that will implement the read operations et c.
     did_t opendir(const std::string & dir_name);
-    int closedir(did_t dir_id);
+    int closedir(did_t dir_id) const;
 
     dirent_t readdir(did_t dir_id);
     int rewind_dir(did_t dir_id);
@@ -88,26 +103,28 @@ private:
     space_map * inode_map_;
 	space_map * space_map_;
 
+	bool sb_dirty_{false};
+	bool im_dirty_{false};
+	bool sm_dirty_{false};
+
+	cache<uint32_t, std::vector<char>> cache_{CACHE_SIZE_DEF};
+
     storage<file> files_{STORAGE_SIZE};
     storage<directory> dirs_{STORAGE_SIZE};
 	directory cwd_;
 
-	uint32_t data_block_to_sector(const uint32_t block) const
-	{
-		return super_block_.data_first_sector + block * super_block_.block_size;
-	}
     uint32_t get_free_block() const;
-    void set_block_status(uint32_t block_id, bool is_busy) const;
+    void set_block_status(uint32_t block_id, bool is_busy);
 
     // proxies for caching
-    int read_block(uint32_t start_sector, char * buffer, std::size_t size);
-    int write_block(uint32_t start_sector, const char * buffer, std::size_t size);
+    int read_block(uint32_t start_block, char * buffer, std::size_t size);
+    int write_block(uint32_t start_block, const char * buffer, std::size_t size);
 
 	int read_data_block(uint32_t start_block, char * buffer, std::size_t size);
 	int write_data_block(uint32_t start_block, const char * buffer, std::size_t size);
 
-    int read_object(uint32_t start_sector, std::size_t offset, std::size_t obj_size, void * buffer);
-    int write_object(uint32_t start_sector, std::size_t offset, std::size_t obj_size, const void * buffer);
+    int read_object(uint32_t start_block, std::size_t offset, std::size_t obj_size, void * buffer);
+    int write_object(uint32_t start_block, std::size_t offset, std::size_t obj_size, const void * buffer);
 
 	int read_data_object(uint32_t start_block, std::size_t offset, std::size_t obj_size, void * buffer);
 	int write_data_object(uint32_t start_block, std::size_t offset, std::size_t obj_size, const void * buffer);
@@ -117,11 +134,12 @@ private:
 
 	static inode_t get_new_inode(file_type f_type, uint16_t permissions);
     uint32_t get_free_inode() const;
-    void set_inode_status(uint32_t inode_num, bool is_busy) const;
+    void set_inode_status(uint32_t inode_num, bool is_busy);
 
-	std::vector<std::string> get_dir_and_file(const std::string & path);
+	static std::vector<std::string> get_dir_and_file(const std::string & file_name);
     int get_inode_by_path(const std::string & path, uint32_t * inode_out);
 
+	int do_unlink(const std::string & file_name, bool force);
 	int do_create(const std::string & file_name, file_type f_type, 
 		uint32_t * inode_out = nullptr, uint32_t * prev_dir_inode_out = nullptr);
 
